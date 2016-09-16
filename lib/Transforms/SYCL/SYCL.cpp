@@ -62,6 +62,23 @@ struct SYCL : public BasicBlockPass {
     DEBUG(errs().write_escaped(II->getModule()->getName()));
     DEBUG(errs() << " and function ");
     DEBUG(errs().write_escaped(II->getFunction()->getName()) << '\n');
+    // Chase the kernel functor
+    auto F = II->getOperand(0);
+    // This is typically a cast instruction like
+    // %f4 = bitcast %class.anon.173* %f to i8*
+    DEBUG(errs() << "Annotated functor: ");
+    DEBUG(F->dump());
+    if (const auto *FuncPtr = dyn_cast<Instruction>(F)) {
+      if (const auto *BC = dyn_cast<BitCastInst>(FuncPtr)) {
+        // Extract the functor type from the source pointer type
+        auto ST = BC->getSrcTy();
+        if (auto PT = dyn_cast<PointerType>(ST)) {
+          auto T = PT->getElementType();
+          DEBUG(errs() << "Functor kernel type capturing the accessors: ");
+          DEBUG(T->dump());
+        }
+      }
+    }
   }
 
 

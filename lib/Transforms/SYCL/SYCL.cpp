@@ -14,6 +14,7 @@
 #include <string>
 
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Demangle/Demangle.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Intrinsics.h"
@@ -62,6 +63,18 @@ struct SYCL : public BasicBlockPass {
     DEBUG(errs().write_escaped(II->getModule()->getName()));
     DEBUG(errs() << " and function ");
     DEBUG(errs().write_escaped(II->getFunction()->getName()) << '\n');
+    DEBUG(
+        // Demangle C++ name for human beings
+        int Status;
+        char *Demangled =
+          itaniumDemangle(II->getFunction()->getName().str().c_str(),
+                          nullptr,
+                          nullptr,
+                          &Status);
+        if (Demangled)
+          errs() << " Demangled: " << Demangled << '\n';
+        free(Demangled);
+          );
     // Chase the kernel functor
     auto F = II->getOperand(0);
     // This is typically a cast instruction like

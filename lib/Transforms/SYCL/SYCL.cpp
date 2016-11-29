@@ -24,6 +24,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+
 using namespace llvm;
 
 // Switch on debug with set DebugFlag=0 or set DebugFlag=1 in debugger or with
@@ -37,8 +38,8 @@ STATISTIC(SYCLCounter, "Processed functions");
 // namespace
 namespace {
 
-// Detect SYCL kernel use
-struct SYCL : public BasicBlockPass {
+// Detect SYCL kernel annotation use
+struct SYCL_annotation : public BasicBlockPass {
 
   static char ID; // Pass identification, replacement for typeid
 
@@ -48,7 +49,7 @@ struct SYCL : public BasicBlockPass {
   const std::string SYCL_kernel_mark =
     std::string { "__triSYCL_kernel" } + '\0';
 
-  SYCL() : BasicBlockPass(ID) {}
+  SYCL_annotation() : BasicBlockPass(ID) {}
 
   // Pass initialization for each function
   bool doInitialization(Function &F) override {
@@ -136,7 +137,78 @@ struct SYCL : public BasicBlockPass {
     return false;
   }
 };
+
+
+// Detect SYCL kernel use
+struct SYCL : public ModulePass {
+
+  static char ID; // Pass identification, replacement for typeid
+
+  // The prefix of a SYCL kernel name in a module
+  static StringRef KernelPrefix;
+
+
+  SYCL() : ModulePass(ID) {}
+
+
+  bool doInitialization(Module &M) override {
+    DEBUG(errs() << "Enter: " << M.getModuleIdentifier() << "\n\n");
+
+    // Do not change the code
+    return false;
+  }
+
+
+  bool doFinalization(Module &M) override {
+    DEBUG(errs() << "Exit: " << M.getModuleIdentifier() << "\n\n");
+
+    // Do not change the code
+    return false;
+  }
+
+  /// Visit all the basic-blocks
+  bool runOnModule(Module &M) override {
+    // A priori the module is not considered as changed
+    bool ModuleChanged = false;
+
+
+    for (auto &G : M.globals()) {
+      DEBUG(errs() << "Global: " << G.getName() << '\n');
+    }
+
+    for (auto &F : M.functions()) {
+      DEBUG(errs() << "Function: ";
+            errs().write_escaped(F.getName());
+
+            // Demangle C++ name for human beings
+            int Status;
+            char *Demangled =
+            itaniumDemangle(F.getName().str().c_str(),
+                            nullptr,
+                            nullptr,
+                            &Status);
+            if (Demangled) {
+              errs() << " Demangled: " << Demangled;
+              if (StringRef { Demangled }.startswith(KernelPrefix))
+                errs() << " \n\nKernel found!\n\n" ;
+            }
+            errs() << '\n';
+            free(Demangled);
+            );
+    }
+
+    // Return the change status of the module
+    return ModuleChanged;
+  }
+};
+
 }
 
+char SYCL_annotation::ID = 0;
+static RegisterPass<SYCL_annotation>
+X { "SYCL-annotation", "SYCL kernel annotation detection pass" };
+
 char SYCL::ID = 0;
-static RegisterPass<SYCL> X("SYCL", "SYCL kernel detection pass");
+static RegisterPass<SYCL> Y { "SYCL", "SYCL kernel detection pass" };
+
+StringRef SYCL::KernelPrefix { "void cl::sycl::detail::instantiate_kernel<" };

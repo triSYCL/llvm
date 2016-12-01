@@ -17,6 +17,7 @@
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
@@ -166,12 +167,22 @@ struct SYCL : public ModulePass {
     return false;
   }
 
+
+  // Mark kernels as external so a GlobalDCE pass will keep them
+  void handleKernel(Function &F) {
+    F.setLinkage(GlobalValue::LinkageTypes::ExternalLinkage);
+  }
+
+
+  // Mark non kernels with internal so a GlobalDCE pass may discard
+  // them if they are not used
+  void handleNonKernel(Function &F) {
+    F.setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
+  }
+
+
   /// Visit all the basic-blocks
   bool runOnModule(Module &M) override {
-    // A priori the module is not considered as changed
-    bool ModuleChanged = false;
-
-
     for (auto &G : M.globals()) {
       DEBUG(errs() << "Global: " << G.getName() << '\n');
     }
@@ -179,26 +190,32 @@ struct SYCL : public ModulePass {
     for (auto &F : M.functions()) {
       DEBUG(errs() << "Function: ";
             errs().write_escaped(F.getName());
-
-            // Demangle C++ name for human beings
-            int Status;
-            char *Demangled =
-            itaniumDemangle(F.getName().str().c_str(),
-                            nullptr,
-                            nullptr,
-                            &Status);
-            if (Demangled) {
-              errs() << " Demangled: " << Demangled;
-              if (StringRef { Demangled }.startswith(KernelPrefix))
-                errs() << " \n\nKernel found!\n\n" ;
+            // Only consider definition of functions
+            if (!F.isDeclaration()) {
+              // Demangle C++ name for human beings
+              int Status;
+              char *Demangled =
+                itaniumDemangle(F.getName().str().c_str(),
+                                nullptr,
+                                nullptr,
+                                &Status);
+              if (Demangled) {
+                errs() << " Demangled: " << Demangled;
+                if (StringRef { Demangled }.startswith(KernelPrefix)) {
+                  errs() << " \n\nKernel found!\n\n" ;
+                  handleKernel(F);
+                }
+                else
+                  handleNonKernel(F);
+              }
+              errs() << '\n';
+              free(Demangled);
             }
-            errs() << '\n';
-            free(Demangled);
             );
     }
 
-    // Return the change status of the module
-    return ModuleChanged;
+    // The module probably changed
+    return true;
   }
 };
 

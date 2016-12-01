@@ -32,6 +32,31 @@ using namespace llvm;
 // option -debug or -debug-only=SYCL
 #define DEBUG_TYPE "SYCL"
 
+
+StringRef SYCLKernelPrefix { "void cl::sycl::detail::instantiate_kernel<" };
+
+/// Test if a function is a SYCL kernel
+bool isSYCLKernel(const Function &F) {
+  bool KernelFound = false;
+  // Demangle C++ name for human beings
+  int Status;
+  char *Demangled = itaniumDemangle(F.getName().str().c_str(),
+                                    nullptr,
+                                    nullptr,
+                                    &Status);
+  if (Demangled) {
+    DEBUG(errs() << " Demangled: " << Demangled);
+    if (StringRef { Demangled }.startswith(SYCLKernelPrefix)) {
+      DEBUG(errs() << " \n\nKernel found!\n\n");
+      KernelFound = true;
+    }
+  }
+  DEBUG(errs() << '\n');
+  free(Demangled);
+  return KernelFound;
+}
+
+
 // Displayed with -stats
 STATISTIC(SYCLCounter, "Processed functions");
 
@@ -177,7 +202,10 @@ struct SYCL : public ModulePass {
   // Mark non kernels with internal so a GlobalDCE pass may discard
   // them if they are not used
   void handleNonKernel(Function &F) {
+    DEBUG(errs() << "\n\tmark function with InternalLinkage: ";
+          errs().write_escaped(F.getName()) << '\n');
     F.setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
+    F.dump();
   }
 
 
@@ -185,33 +213,20 @@ struct SYCL : public ModulePass {
   bool runOnModule(Module &M) override {
     for (auto &G : M.globals()) {
       DEBUG(errs() << "Global: " << G.getName() << '\n');
+      if (!G.isDeclaration())
+        G.setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
     }
 
     for (auto &F : M.functions()) {
       DEBUG(errs() << "Function: ";
-            errs().write_escaped(F.getName());
-            // Only consider definition of functions
-            if (!F.isDeclaration()) {
-              // Demangle C++ name for human beings
-              int Status;
-              char *Demangled =
-                itaniumDemangle(F.getName().str().c_str(),
-                                nullptr,
-                                nullptr,
-                                &Status);
-              if (Demangled) {
-                errs() << " Demangled: " << Demangled;
-                if (StringRef { Demangled }.startswith(KernelPrefix)) {
-                  errs() << " \n\nKernel found!\n\n" ;
-                  handleKernel(F);
-                }
-                else
-                  handleNonKernel(F);
-              }
-              errs() << '\n';
-              free(Demangled);
-            }
-            );
+            errs().write_escaped(F.getName()));
+      // Only consider definition of functions
+      if (!F.isDeclaration()) {
+        if (isSYCLKernel(F))
+          handleKernel(F);
+        else
+          handleNonKernel(F);
+      }
     }
 
     // The module probably changed
@@ -227,5 +242,3 @@ X { "SYCL-annotation", "SYCL kernel annotation detection pass" };
 
 char SYCL::ID = 0;
 static RegisterPass<SYCL> Y { "SYCL", "SYCL kernel detection pass" };
-
-StringRef SYCL::KernelPrefix { "void cl::sycl::detail::instantiate_kernel<" };

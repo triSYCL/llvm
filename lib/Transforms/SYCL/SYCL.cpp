@@ -209,15 +209,6 @@ struct SYCL : public ModulePass {
 
   /// Visit all the basic-blocks
   bool runOnModule(Module &M) override {
-    for (auto &G : M.globals()) {
-      DEBUG(errs() << "Global: " << G.getName() << '\n');
-      // Skip intrinsic variable for now.
-      // Factorize out Function::isIntrinsic to something higher?
-      if (!G.isDeclaration()
-          && !G.getName().startswith("llvm."))
-        G.setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
-    }
-
     for (auto &F : M.functions()) {
       DEBUG(errs() << "Function: ";
             errs().write_escaped(F.getName()) << '\n');
@@ -228,6 +219,21 @@ struct SYCL : public ModulePass {
         else
           handleNonKernel(F);
       }
+    }
+
+    for (auto &G : M.globals()) {
+      DEBUG(errs() << "Global: " << G.getName() << '\n');
+      // Skip intrinsic variable for now.
+      // Factorize out Function::isIntrinsic to something higher?
+      if (!G.isDeclaration()
+          && !G.getName().startswith("llvm."))
+        G.setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
+    }
+
+    // Make the global alias internal too otherwise the GlobalDCE will think
+    // these objects are useful
+    for (GlobalAlias &GA : M.aliases()) {
+      GA.setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
     }
 
     // The module probably changed

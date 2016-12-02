@@ -25,6 +25,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/Utils/CtorUtils.h"
 
 using namespace llvm;
 
@@ -235,6 +236,11 @@ struct SYCL : public ModulePass {
     for (GlobalAlias &GA : M.aliases()) {
       GA.setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
     }
+
+    // Remove also the global destructors.
+    // For now just consider that a kernel cannot have some program-scope
+    // constructors
+    optimizeGlobalCtorsList(M, [] (Function *) { return true; });
 
     // The module probably changed
     return true;

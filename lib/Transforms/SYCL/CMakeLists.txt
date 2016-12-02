@@ -11,6 +11,7 @@ if(WIN32 OR CYGWIN)
 endif()
 
 add_llvm_loadable_module( SYCL
+  SYCL-annotation.cpp
   SYCL.cpp
 
   DEPENDS

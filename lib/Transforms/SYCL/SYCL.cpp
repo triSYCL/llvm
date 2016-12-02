@@ -7,21 +7,16 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Detect SYCL kernels
-//
-//===----------------------------------------------------------------------===//
-
-#include <string>
+// Detect and mark SYCL kernels with external linkage.  Everything else is
+// marked with internal linkage, so the GlobalDCE pass can be used later to
+// keep only the kernel code and the transitive closure of the dependencies
+// ===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Demangle/Demangle.h"
-#include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalValue.h"
-#include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/Operator.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
@@ -29,11 +24,13 @@
 
 using namespace llvm;
 
-// Switch on debug with set DebugFlag=0 or set DebugFlag=1 in debugger or with
-// option -debug or -debug-only=SYCL
+/// Switch on debug with set DebugFlag=0 or set DebugFlag=1 in debugger or with
+/// option -debug or -debug-only=SYCL
 #define DEBUG_TYPE "SYCL"
 
 
+/// The function template used to instantiate a kernel inside triSYCL
+/// is used as marker to detect the kernel functions
 StringRef SYCLKernelPrefix { "void cl::sycl::detail::instantiate_kernel<" };
 
 /// Test if a function is a SYCL kernel
@@ -57,20 +54,24 @@ bool isSYCLKernel(const Function &F) {
 }
 
 
-// Displayed with -stats
-STATISTIC(SYCLCounter, "Processed functions");
+/// Displayed with -stats
+STATISTIC(SYCL_kernel_found, "Number of SYCL kernel functions");
+STATISTIC(SYCL_non_kernel_found, "Number of non SYCL kernel functions");
 
 // Put the code in an anonymous namespace to avoid polluting the global
 // namespace
 namespace {
 
-// Detect SYCL kernel use
+/// Detect and mark SYCL kernels with external linkage
+///
+/// Everything else is marked with internal linkage, so the GlobalDCE pass
+/// can be used later to keep only the kernel code and the transitive closure
+/// of the dependencies.
+///
+/// Based on an idea from Mehdi Amini
 struct SYCL : public ModulePass {
 
   static char ID; // Pass identification, replacement for typeid
-
-  // The prefix of a SYCL kernel name in a module
-  static StringRef KernelPrefix;
 
 
   SYCL() : ModulePass(ID) {}
@@ -92,18 +93,20 @@ struct SYCL : public ModulePass {
   }
 
 
-  // Mark kernels as external so a GlobalDCE pass will keep them
+  /// Mark kernels as external so the GlobalDCE pass will keep them
   void handleKernel(Function &F) {
     F.setLinkage(GlobalValue::LinkageTypes::ExternalLinkage);
+    SYCL_kernel_found++;
   }
 
 
-  // Mark non kernels with internal so a GlobalDCE pass may discard
-  // them if they are not used
+  /// Mark non kernels with internal linkage so the GlobalDCE pass may discard
+  /// them if they are not used
   void handleNonKernel(Function &F) {
     DEBUG(errs() << "\tmark function with InternalLinkage: ";
           errs().write_escaped(F.getName()) << '\n');
     F.setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
+    SYCL_non_kernel_found++;
   }
 
 
@@ -121,24 +124,25 @@ struct SYCL : public ModulePass {
       }
     }
 
+    // The global variables may keep references to some functions, so mark them
+    // as internal too
     for (auto &G : M.globals()) {
       DEBUG(errs() << "Global: " << G.getName() << '\n');
       // Skip intrinsic variable for now.
-      // Factorize out Function::isIntrinsic to something higher?
+      // \todo Factorize out Function::isIntrinsic to something higher?
       if (!G.isDeclaration()
           && !G.getName().startswith("llvm."))
         G.setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
     }
 
-    // Make the global alias internal too otherwise the GlobalDCE will think
-    // these objects are useful
+    // Make the global aliases internal too, otherwise the GlobalDCE will think
+    // the aliased objects are useful
     for (GlobalAlias &GA : M.aliases()) {
       GA.setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
     }
 
-    // Remove also the global destructors.
-    // For now just consider that a kernel cannot have some program-scope
-    // constructors
+    // Remove also the global destructors.  For now, just consider that
+    // a kernel cannot have program-scope (in the sense of OpenCL) constructors
     optimizeGlobalCtorsList(M, [] (Function *) { return true; });
 
     // The module probably changed
@@ -149,5 +153,5 @@ struct SYCL : public ModulePass {
 }
 
 char SYCL::ID = 0;
-static RegisterPass<SYCL> X { "SYCL-filter-kernel",
+static RegisterPass<SYCL> X { "SYCL-kernel-filter",
                               "SYCL kernel detection pass" };

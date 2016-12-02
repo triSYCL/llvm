@@ -12,7 +12,7 @@ endif()
 
 add_llvm_loadable_module( SYCL
   SYCL-annotation.cpp
-  SYCL.cpp
+  SYCLKernelFilter.cpp
 
   DEPENDS
   intrinsics_gen

@@ -1,4 +1,4 @@
-//===- SYCL.cpp                                             ---------------===//
+//===- SYCLKernelFilter.cpp                               ---------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -55,8 +55,8 @@ bool isSYCLKernel(const Function &F) {
 
 
 /// Displayed with -stats
-STATISTIC(SYCL_kernel_found, "Number of SYCL kernel functions");
-STATISTIC(SYCL_non_kernel_found, "Number of non SYCL kernel functions");
+STATISTIC(SYCLKernelFound, "Number of SYCL kernel functions");
+STATISTIC(SYCLNonKernelFound, "Number of non SYCL kernel functions");
 
 // Put the code in an anonymous namespace to avoid polluting the global
 // namespace
@@ -69,12 +69,12 @@ namespace {
 /// of the dependencies.
 ///
 /// Based on an idea from Mehdi Amini
-struct SYCL : public ModulePass {
+struct SYCLKernelFilter : public ModulePass {
 
   static char ID; // Pass identification, replacement for typeid
 
 
-  SYCL() : ModulePass(ID) {}
+  SYCLKernelFilter() : ModulePass(ID) {}
 
 
   bool doInitialization(Module &M) override {
@@ -96,7 +96,7 @@ struct SYCL : public ModulePass {
   /// Mark kernels as external so the GlobalDCE pass will keep them
   void handleKernel(Function &F) {
     F.setLinkage(GlobalValue::LinkageTypes::ExternalLinkage);
-    SYCL_kernel_found++;
+    SYCLKernelFound++;
   }
 
 
@@ -106,7 +106,7 @@ struct SYCL : public ModulePass {
     DEBUG(errs() << "\tmark function with InternalLinkage: ";
           errs().write_escaped(F.getName()) << '\n');
     F.setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
-    SYCL_non_kernel_found++;
+    SYCLNonKernelFound++;
   }
 
 
@@ -152,6 +152,6 @@ struct SYCL : public ModulePass {
 
 }
 
-char SYCL::ID = 0;
-static RegisterPass<SYCL> X { "SYCL-kernel-filter",
-                              "SYCL kernel detection pass" };
+char SYCLKernelFilter::ID = 0;
+static RegisterPass<SYCLKernelFilter> X { "SYCL-kernel-filter",
+                                          "SYCL kernel detection pass" };

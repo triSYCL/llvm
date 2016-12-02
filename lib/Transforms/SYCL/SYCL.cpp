@@ -47,11 +47,10 @@ bool isSYCLKernel(const Function &F) {
   if (Demangled) {
     DEBUG(errs() << " Demangled: " << Demangled);
     if (StringRef { Demangled }.startswith(SYCLKernelPrefix)) {
-      DEBUG(errs() << " \n\nKernel found!\n\n");
+      DEBUG(errs() << " \n\n\tKernel found!\n\n");
       KernelFound = true;
     }
   }
-  DEBUG(errs() << '\n');
   free(Demangled);
   return KernelFound;
 }
@@ -202,10 +201,9 @@ struct SYCL : public ModulePass {
   // Mark non kernels with internal so a GlobalDCE pass may discard
   // them if they are not used
   void handleNonKernel(Function &F) {
-    DEBUG(errs() << "\n\tmark function with InternalLinkage: ";
+    DEBUG(errs() << "\tmark function with InternalLinkage: ";
           errs().write_escaped(F.getName()) << '\n');
     F.setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
-    F.dump();
   }
 
 
@@ -213,13 +211,16 @@ struct SYCL : public ModulePass {
   bool runOnModule(Module &M) override {
     for (auto &G : M.globals()) {
       DEBUG(errs() << "Global: " << G.getName() << '\n');
-      if (!G.isDeclaration())
+      // Skip intrinsic variable for now.
+      // Factorize out Function::isIntrinsic to something higher?
+      if (!G.isDeclaration()
+          && !G.getName().startswith("llvm."))
         G.setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
     }
 
     for (auto &F : M.functions()) {
       DEBUG(errs() << "Function: ";
-            errs().write_escaped(F.getName()));
+            errs().write_escaped(F.getName()) << '\n');
       // Only consider definition of functions
       if (!F.isDeclaration()) {
         if (isSYCLKernel(F))

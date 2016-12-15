@@ -13,11 +13,11 @@
 // ===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Demangle/Demangle.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
+#include "llvm/SYCL.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/CtorUtils.h"
@@ -27,31 +27,6 @@ using namespace llvm;
 /// Switch on debug with set DebugFlag=0 or set DebugFlag=1 in debugger or with
 /// option -debug or -debug-only=SYCL
 #define DEBUG_TYPE "SYCL"
-
-
-/// The function template used to instantiate a kernel inside triSYCL
-/// is used as marker to detect the kernel functions
-StringRef SYCLKernelPrefix { "void cl::sycl::detail::instantiate_kernel<" };
-
-/// Test if a function is a SYCL kernel
-bool isSYCLKernel(const Function &F) {
-  bool KernelFound = false;
-  // Demangle C++ name for human beings
-  int Status;
-  char *Demangled = itaniumDemangle(F.getName().str().c_str(),
-                                    nullptr,
-                                    nullptr,
-                                    &Status);
-  if (Demangled) {
-    DEBUG(errs() << " Demangled: " << Demangled);
-    if (StringRef { Demangled }.startswith(SYCLKernelPrefix)) {
-      DEBUG(errs() << " \n\n\tKernel found!\n\n");
-      KernelFound = true;
-    }
-  }
-  free(Demangled);
-  return KernelFound;
-}
 
 
 /// Displayed with -stats
@@ -117,7 +92,7 @@ struct SYCLKernelFilter : public ModulePass {
             errs().write_escaped(F.getName()) << '\n');
       // Only consider definition of functions
       if (!F.isDeclaration()) {
-        if (isSYCLKernel(F))
+        if (sycl::isKernel(F))
           handleKernel(F);
         else
           handleNonKernel(F);
@@ -154,4 +129,4 @@ struct SYCLKernelFilter : public ModulePass {
 
 char SYCLKernelFilter::ID = 0;
 static RegisterPass<SYCLKernelFilter> X { "SYCL-kernel-filter",
-                                          "SYCL kernel detection pass" };
+                                          "SYCL kernel filtering pass" };

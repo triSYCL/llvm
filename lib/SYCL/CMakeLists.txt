@@ -12,6 +12,7 @@ endif()
 
 add_llvm_loadable_module( SYCL
   SYCL-annotation.cpp
+  SYCLArgsFlattening.cpp
   SYCLKernel.cpp
   SYCLKernelFilter.cpp
 

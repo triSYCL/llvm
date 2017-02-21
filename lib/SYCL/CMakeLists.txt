@@ -15,6 +15,7 @@ add_llvm_loadable_module( SYCL
   SYCLArgsFlattening.cpp
   SYCLKernel.cpp
   SYCLKernelFilter.cpp
+  SYCLSerializeArguments.cpp
 
   DEPENDS
   intrinsics_gen

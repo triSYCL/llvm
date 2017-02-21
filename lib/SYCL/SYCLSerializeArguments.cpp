@@ -101,16 +101,32 @@ struct SYCLSerializeArguments : public ModulePass {
     for (Argument &A : F.args()) {
       DEBUG(dbgs() << "Serializing '" << A.getName() << "'.\n");
       DEBUG(dbgs() << "Size '" << DL.getTypeAllocSize(A.getType()) << "'.\n");
+      // An IR version of the index number
+      auto Index = Builder.getInt64(IndexNumber);
 
       if (auto PTy = dyn_cast<PointerType>(A.getType())) {
         DEBUG(dbgs() << " pointer to\n");
         DEBUG(PTy->getElementType()->dump());
-        auto Index = Builder.getInt64(IndexNumber);
         // The pointer argument casted to a void *
         auto Arg =
           Builder.CreatePointerCast(&A, Type::getInt8PtrTy(F.getContext()));
         // The size of the pointee type
         auto ArgSize = DL.getTypeAllocSize(PTy->getElementType());
+        // Insert the call to the serialization function with the 3 required
+        // arguments
+        Value * Args[] { Index, Arg, Builder.getInt64(ArgSize) };
+        // \todo add an initializer list to makeArrayRef
+        Builder.CreateCall(SF, makeArrayRef(Args));
+      }
+      else {
+        // Create an intermediate memory place to pass the value by address
+        auto Alloca = Builder.CreateAlloca(A.getType());
+        Builder.CreateStore(&A, Alloca);
+        auto Arg =
+          Builder.CreatePointerCast(Alloca,
+                                    Type::getInt8PtrTy(F.getContext()));
+        // The size of the argument
+        auto ArgSize = DL.getTypeAllocSize(A.getType());
         // Insert the call to the serialization function with the 3 required
         // arguments
         Value * Args[] { Index, Arg, Builder.getInt64(ArgSize) };

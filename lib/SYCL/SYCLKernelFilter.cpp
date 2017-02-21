@@ -85,7 +85,7 @@ struct SYCLKernelFilter : public ModulePass {
   }
 
 
-  /// Visit all the basic-blocks
+  /// Visit all the module content
   bool runOnModule(Module &M) override {
     for (auto &F : M.functions()) {
       DEBUG(errs() << "Function: ";

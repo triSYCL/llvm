@@ -50,8 +50,17 @@ struct SYCLSerializeArguments : public ModulePass {
   ///
   /// Note that it has to be defined in some include files so this pass can use
   /// it.
+  ///
+  /// The function is defined
+  /// in triSYCL/include/CL/sycl/device_runtime.hpp
+  ///
+  /// WEAK_ATTRIB_PREFIX void WEAK_ATTRIB_SUFFIX
+  /// serialize_arg(detail::task &task,
+  ///               std::size_t index,
+  ///               void *arg,
+  ///               std::size_t arg_size) {
   static auto constexpr SerializationFunctionName =
-    "_ZN2cl4sycl3drt13serialize_argEmPvm";
+    "_ZN2cl4sycl3drt13serialize_argERNS0_6detail4taskEmPvm";
 
 
   SYCLSerializeArguments() : ModulePass(ID) {}
@@ -96,40 +105,46 @@ struct SYCLSerializeArguments : public ModulePass {
       .lookup(SerializationFunctionName);
     assert(SF && "Serialization function not found");
 
+    // An iterator pointing to the first function argument
+    auto A = F.arg_begin();
+    // The first argument is the cl::sycl::detail::task address
+    auto &Task = *A++;
+
     // The index used to number the arguments in the serialization
     std::size_t IndexNumber = 0;
-    for (Argument &A : F.args()) {
-      DEBUG(dbgs() << "Serializing '" << A.getName() << "'.\n");
-      DEBUG(dbgs() << "Size '" << DL.getTypeAllocSize(A.getType()) << "'.\n");
+    // Deal with the remaining arguments
+    for (; A != F.arg_end(); ++A) {
+      DEBUG(dbgs() << "Serializing '" << A->getName() << "'.\n");
+      DEBUG(dbgs() << "Size '" << DL.getTypeAllocSize(A->getType()) << "'.\n");
       // An IR version of the index number
       auto Index = Builder.getInt64(IndexNumber);
 
-      if (auto PTy = dyn_cast<PointerType>(A.getType())) {
+      if (auto PTy = dyn_cast<PointerType>(A->getType())) {
         DEBUG(dbgs() << " pointer to\n");
         DEBUG(PTy->getElementType()->dump());
         // The pointer argument casted to a void *
         auto Arg =
-          Builder.CreatePointerCast(&A, Type::getInt8PtrTy(F.getContext()));
+          Builder.CreatePointerCast(&*A, Type::getInt8PtrTy(F.getContext()));
         // The size of the pointee type
         auto ArgSize = DL.getTypeAllocSize(PTy->getElementType());
         // Insert the call to the serialization function with the 3 required
         // arguments
-        Value * Args[] { Index, Arg, Builder.getInt64(ArgSize) };
+        Value * Args[] { &Task, Index, Arg, Builder.getInt64(ArgSize) };
         // \todo add an initializer list to makeArrayRef
         Builder.CreateCall(SF, makeArrayRef(Args));
       }
       else {
         // Create an intermediate memory place to pass the value by address
-        auto Alloca = Builder.CreateAlloca(A.getType());
-        Builder.CreateStore(&A, Alloca);
+        auto Alloca = Builder.CreateAlloca(A->getType());
+        Builder.CreateStore(&*A, Alloca);
         auto Arg =
           Builder.CreatePointerCast(Alloca,
                                     Type::getInt8PtrTy(F.getContext()));
         // The size of the argument
-        auto ArgSize = DL.getTypeAllocSize(A.getType());
+        auto ArgSize = DL.getTypeAllocSize(A->getType());
         // Insert the call to the serialization function with the 3 required
         // arguments
-        Value * Args[] { Index, Arg, Builder.getInt64(ArgSize) };
+        Value * Args[] { &Task, Index, Arg, Builder.getInt64(ArgSize) };
         // \todo add an initializer list to makeArrayRef
         Builder.CreateCall(SF, makeArrayRef(Args));
       }

@@ -12,8 +12,10 @@
 
 #include <cstdlib>
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Demangle/Demangle.h"
+// Wait for LLVM 4.0...
+// #include "llvm/Demangle/Demangle.h"
 #include "llvm/IR/Function.h"
+#include "llvm/SYCL.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 

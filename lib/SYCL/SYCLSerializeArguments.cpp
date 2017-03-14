@@ -54,13 +54,28 @@ struct SYCLSerializeArguments : public ModulePass {
   /// The function is defined
   /// in triSYCL/include/CL/sycl/device_runtime.hpp
   ///
-  /// WEAK_ATTRIB_PREFIX void WEAK_ATTRIB_SUFFIX
+  /// TRISYCL_WEAK_ATTRIB_PREFIX void TRISYCL_WEAK_ATTRIB_SUFFIX
   /// serialize_arg(detail::task &task,
   ///               std::size_t index,
   ///               void *arg,
-  ///               std::size_t arg_size) {
+  ///               std::size_t arg_size)
   static auto constexpr SerializationFunctionName =
     "_ZN2cl4sycl3drt13serialize_argERNS0_6detail4taskEmPvm";
+
+
+  /// The mangled name of the kernel launching function to use.
+  ///
+  /// Note that it has to be defined in some include files so this pass can use
+  /// it.
+  ///
+  /// The function is defined
+  /// in triSYCL/include/CL/sycl/device_runtime.hpp
+  ///
+  /// TRISYCL_WEAK_ATTRIB_PREFIX void TRISYCL_WEAK_ATTRIB_SUFFIX
+  /// launch_kernel(detail::task &task,
+  ///               const char *kernel_name)
+  static auto constexpr KernelLaunchingFunctionName =
+    "_ZN2cl4sycl3drt13launch_kernelERNS0_6detail4taskEPKc";
 
 
   SYCLSerializeArguments() : ModulePass(ID) {}
@@ -119,6 +134,7 @@ struct SYCLSerializeArguments : public ModulePass {
       // An IR version of the index number
       auto Index = Builder.getInt64(IndexNumber);
 
+      // \todo Refactor/fuse the then/else part
       if (auto PTy = dyn_cast<PointerType>(A->getType())) {
         DEBUG(dbgs() << " pointer to\n");
         DEBUG(PTy->getElementType()->dump());
@@ -150,6 +166,20 @@ struct SYCLSerializeArguments : public ModulePass {
       }
       ++IndexNumber;
     }
+
+    // Get the predefined kernel launching function to use
+    auto KLF = F.getParent()->getValueSymbolTable()
+      .lookup(KernelLaunchingFunctionName);
+    assert(KLF && "Kernel launching function not found");
+
+    // Create a global string variable with the name of the kernel itself
+    // and return an char * on it
+    auto Name = Builder.CreateGlobalStringPtr(F.getName());
+
+    // Add the launching of the kernel
+    Value * Args[] { &Task, Name };
+    // \todo add an initializer list to makeArrayRef
+    Builder.CreateCall(KLF, makeArrayRef(Args));
 
     // Add a "ret void" as the function terminator.
     // Assume the return type of a kernel is void.

@@ -89,6 +89,24 @@ void setSPIRVersion(Module &M) {
 }
 
 
+/// Add metadata for the OpenCL 1.2 version
+void setOpenCLVersion(Module &M) {
+  /* Get inSPIRation from SPIRTargetCodeGenInfo::emitTargetMD in
+     tools/clang/lib/CodeGen/TargetInfo.cpp */
+  auto &Ctx = M.getContext();
+  auto Int32Ty = llvm::Type::getInt32Ty(Ctx);
+  // SPIR v2.0 s2.13 - The OpenCL version used by the module is stored in the
+  // opencl.ocl.version named metadata node.
+  llvm::Metadata *OCLVerElts[] = {
+    llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(Int32Ty, 1)),
+    llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(Int32Ty, 2))
+  };
+  llvm::NamedMDNode *OCLVerMD =
+      M.getOrInsertNamedMetadata("opencl.ocl.version");
+  OCLVerMD->addOperand(llvm::MDNode::get(Ctx, OCLVerElts));
+}
+
+
   /// Visit all the functions of the module
   bool runOnModule(Module &M) override {
     for (auto &F : M.functions()) {
@@ -99,6 +117,8 @@ void setSPIRVersion(Module &M) {
     }
 
     setSPIRVersion(M);
+
+    setOpenCLVersion(M);
 
     // The module probably changed
     return true;

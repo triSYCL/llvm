@@ -1,4 +1,4 @@
-//===- SPIRify.cpp                           ---------------===//
+//===- inSPIRation.cpp                           ---------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -36,12 +36,12 @@ STATISTIC(SYCLKernelProcessed, "Number of SYCL kernel functions processed");
 namespace {
 
 /// Replace a SYCL kernel code by a function serializing its arguments
-struct SPIRify : public ModulePass {
+struct inSPIRation : public ModulePass {
 
   static char ID; // Pass identification, replacement for typeid
 
 
-  SPIRify() : ModulePass(ID) {}
+  inSPIRation() : ModulePass(ID) {}
 
 
   bool doInitialization(Module &M) override {
@@ -85,8 +85,8 @@ struct SPIRify : public ModulePass {
 
 }
 
-char SPIRify::ID = 0;
-static RegisterPass<SPIRify> X {
-  "SPIRify",
+char inSPIRation::ID = 0;
+static RegisterPass<inSPIRation> X {
+  "inSPIRation",
   "pass to make functions and kernels SPIR compatible"
  };

@@ -12,7 +12,7 @@ endif()
 
 add_llvm_loadable_module( SYCL
   ItaniumDemangle.cpp
-  SPIRify.cpp
+  inSPIRation.cpp
   SYCL-annotation.cpp
   SYCLArgsFlattening.cpp
   SYCLKernel.cpp

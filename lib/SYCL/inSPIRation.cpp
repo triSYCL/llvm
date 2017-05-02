@@ -14,6 +14,7 @@
 
 #include "llvm/ADT/Statistic.h"
 #include "llvm/IR/CallingConv.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
@@ -71,6 +72,23 @@ struct inSPIRation : public ModulePass {
   }
 
 
+/// Add metadata for the SPIR 2.0 version
+void setSPIRVersion(Module &M) {
+  /* Get inSPIRation from SPIRTargetCodeGenInfo::emitTargetMD in
+     tools/clang/lib/CodeGen/TargetInfo.cpp */
+  auto &Ctx = M.getContext();
+  auto Int32Ty = llvm::Type::getInt32Ty(Ctx);
+  // SPIR v2.0 s2.12 - The SPIR version used by the module is stored in the
+  // opencl.spir.version named metadata.
+  llvm::Metadata *SPIRVerElts[] = {
+    llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(Int32Ty, 2)),
+    llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(Int32Ty, 0))
+  };
+  M.getOrInsertNamedMetadata("opencl.spir.version")
+    ->addOperand(llvm::MDNode::get(Ctx, SPIRVerElts));
+}
+
+
   /// Visit all the functions of the module
   bool runOnModule(Module &M) override {
     for (auto &F : M.functions()) {
@@ -79,6 +97,8 @@ struct inSPIRation : public ModulePass {
       if (!F.isDeclaration() && sycl::isKernel(F))
           kernelSPIRify(F);
     }
+
+    setSPIRVersion(M);
 
     // The module probably changed
     return true;

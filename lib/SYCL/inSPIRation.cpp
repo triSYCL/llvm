@@ -66,6 +66,8 @@ struct inSPIRation : public ModulePass {
 
     // Move to SPIR kernel
     F.setCallingConv(CallingConv::SPIR_KERNEL);
+    // A SPIR kernel has no personality
+    F.setPersonalityFn(nullptr);
   }
 
 

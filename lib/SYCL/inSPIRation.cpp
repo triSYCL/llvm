@@ -65,10 +65,38 @@ struct inSPIRation : public ModulePass {
   void kernelSPIRify(Function &F) {
     ++SYCLKernelProcessed;
 
-    // Move to SPIR kernel
+    // This is a SPIR kernel
     F.setCallingConv(CallingConv::SPIR_KERNEL);
+
     // A SPIR kernel has no personality
     F.setPersonalityFn(nullptr);
+
+    /* Add kernel metadata inSPIRed from GenOpenCLArgMetadata() in
+       /tools/clang/lib/CodeGen/CodeGenFunction.cpp */
+
+    auto &Ctx = F.getContext();
+    auto Int32Ty = llvm::Type::getInt32Ty(Ctx);
+
+    // MDNode for the kernel argument address space qualifiers
+    SmallVector<llvm::Metadata *, 8> AddressSpaceQuals;
+
+    for (auto &A : F.args()) {
+      if (auto PTy = dyn_cast<PointerType>(A.getType())) {
+        // Add numeric value of the address space as address qualifier
+        AddressSpaceQuals.push_back(
+            llvm::ConstantAsMetadata::get(
+                llvm::ConstantInt::get(Int32Ty,
+                                       PTy->getAddressSpace())));
+      }
+      else
+        // Otherwise use default address space
+        AddressSpaceQuals.push_back(
+            llvm::ConstantAsMetadata::get(
+                llvm::ConstantInt::get(Int32Ty, 0)));
+    }
+    //  Add the SPIR metadata describing the address space of each argument
+    F.setMetadata("kernel_arg_addr_space",
+                  llvm::MDNode::get(Ctx, AddressSpaceQuals));
   }
 
 

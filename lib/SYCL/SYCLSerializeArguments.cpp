@@ -14,6 +14,8 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/IR/Argument.h"
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Instructions.h"

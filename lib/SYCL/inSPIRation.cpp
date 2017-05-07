@@ -12,11 +12,15 @@
 
 #include <cstddef>
 
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/IR/Argument.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
 #include "llvm/Pass.h"
 #include "llvm/SYCL.h"
 #include "llvm/Support/Debug.h"
@@ -79,8 +83,25 @@ struct inSPIRation : public ModulePass {
 
     // MDNode for the kernel argument address space qualifiers
     SmallVector<llvm::Metadata *, 8> AddressSpaceQuals;
+    // MDNode for the kernel argument type qualifiers
+    SmallVector<llvm::Metadata *, 8> TypeQuals;
 
     for (auto &A : F.args()) {
+      std::string TypeQual;
+      auto buildTypeQualString = [&] (bool Present, const char *SPIRName) {
+        if (Present) {
+          if (TypeQual.empty())
+            TypeQual = SPIRName;
+          else
+            TypeQual += std::string { " " } + SPIRName;
+        }
+      };
+      buildTypeQualString(A.onlyReadsMemory(), "const");
+      buildTypeQualString(A.hasNoAliasAttr(), "restrict");
+      // \todo Deal with volatile
+      // \todo Deal with pipes
+      TypeQuals.push_back(llvm::MDString::get(Ctx, TypeQual));
+
       if (auto PTy = dyn_cast<PointerType>(A.getType())) {
         // Add numeric value of the address space as address qualifier
         AddressSpaceQuals.push_back(
@@ -97,6 +118,10 @@ struct inSPIRation : public ModulePass {
     //  Add the SPIR metadata describing the address space of each argument
     F.setMetadata("kernel_arg_addr_space",
                   llvm::MDNode::get(Ctx, AddressSpaceQuals));
+
+    //  Add the SPIR metadata describing the type qualifier of each argument
+    F.setMetadata("kernel_arg_type_qual",
+                  llvm::MDNode::get(Ctx, TypeQuals));
   }
 
 

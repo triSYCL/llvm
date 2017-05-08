@@ -8,9 +8,13 @@
 //===----------------------------------------------------------------------===//
 //
 // Rewrite the kernels and functions so that they are compatible with SPIR
+// representation as described in "The SPIR Specification Version 2.0 -
+// Provisional" from Khronos Group.
 // ===---------------------------------------------------------------------===//
 
 #include <cstddef>
+#include <regex>
+#include <string>
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
@@ -65,6 +69,40 @@ struct inSPIRation : public ModulePass {
   }
 
 
+  /// Construct an equivalent SPIR typename compatible with OpenCL kernel
+  /// calling conventions
+  ///
+  /// \todo Use a less hackish way to prettyprint the right types.
+  ///
+  /// \todo Implement more types from section "2.1 Supported Data Types" of "The
+  /// SPIR Specification Version 2.0 - Provisional" document.
+  std::string buildSPIRType(const Argument &A) {
+    // First get the LLVM type as a string
+    std::string TypeName;
+    raw_string_ostream SO { TypeName };
+    SO << *A.getType();
+    SO.flush();
+    // A list of rewriting as std::regex/format pairs to be used by
+    // std::regex_replace
+    const char * Type_Transforms[][2] = {
+      { "i8", "char" },
+      { "i16", "short" },
+      { "i32", "int" },
+      { "i64", "long" },
+      // Has to appear after "i16" to be deterministic:
+      { "i1", "bool" },
+      // Suppress the address space information
+      { "addrspace\\(.\\)", "" }
+    };
+    // Apply the type rewriting recipe
+    for (auto &Transform : Type_Transforms)
+      TypeName = std::regex_replace(TypeName,
+                                    std::regex { Transform[0] },
+                                    Transform[1]);
+    return TypeName;
+  }
+
+
   /// Replace the kernel instructions by the serialization of its arguments
   void kernelSPIRify(Function &F) {
     ++SYCLKernelProcessed;
@@ -83,10 +121,23 @@ struct inSPIRation : public ModulePass {
 
     // MDNode for the kernel argument address space qualifiers
     SmallVector<llvm::Metadata *, 8> AddressSpaceQuals;
+    // MDNode for the kernel argument types
+    SmallVector<llvm::Metadata *, 8> Types;
     // MDNode for the kernel argument type qualifiers
     SmallVector<llvm::Metadata *, 8> TypeQuals;
 
     for (auto &A : F.args()) {
+      std::string TypeName;
+      raw_string_ostream SO { TypeName };
+      SO << *A.getType();
+      SO.flush();
+      std::regex RE_i32 { "i32" };
+      DEBUG(dbgs() << "Type name " << TypeName
+            << '\n' << std::regex_replace(TypeName, RE_i32, "int")
+            << '\n' << buildSPIRType(A)<< '\n';
+            A.getType()->dump(););
+      Types.push_back(llvm::MDString::get(Ctx, buildSPIRType(A)));
+
       std::string TypeQual;
       auto buildTypeQualString = [&] (bool Present, const char *SPIRName) {
         if (Present) {
@@ -119,9 +170,11 @@ struct inSPIRation : public ModulePass {
     F.setMetadata("kernel_arg_addr_space",
                   llvm::MDNode::get(Ctx, AddressSpaceQuals));
 
+    //  Add the SPIR metadata describing the type of each argument
+    F.setMetadata("kernel_arg_type", llvm::MDNode::get(Ctx, Types));
+
     //  Add the SPIR metadata describing the type qualifier of each argument
-    F.setMetadata("kernel_arg_type_qual",
-                  llvm::MDNode::get(Ctx, TypeQuals));
+    F.setMetadata("kernel_arg_type_qual", llvm::MDNode::get(Ctx, TypeQuals));
   }
 
 

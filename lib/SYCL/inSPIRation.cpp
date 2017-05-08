@@ -166,14 +166,18 @@ struct inSPIRation : public ModulePass {
             llvm::ConstantAsMetadata::get(
                 llvm::ConstantInt::get(Int32Ty, 0)));
     }
-    //  Add the SPIR metadata describing the address space of each argument
+    // Add the SPIR metadata describing the address space of each argument
     F.setMetadata("kernel_arg_addr_space",
                   llvm::MDNode::get(Ctx, AddressSpaceQuals));
 
-    //  Add the SPIR metadata describing the type of each argument
+    // Add the SPIR metadata describing the type of each argument
     F.setMetadata("kernel_arg_type", llvm::MDNode::get(Ctx, Types));
 
-    //  Add the SPIR metadata describing the type qualifier of each argument
+    // For now, just repeat "kernel_arg_type" as "kernel_arg_base_type" because
+    // we do not have the type alias information
+    F.setMetadata("kernel_arg_base_type", llvm::MDNode::get(Ctx, Types));
+
+    // Add the SPIR metadata describing the type qualifier of each argument
     F.setMetadata("kernel_arg_type_qual", llvm::MDNode::get(Ctx, TypeQuals));
   }
 

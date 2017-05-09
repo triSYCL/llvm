@@ -88,7 +88,7 @@ namespace {
 
     bool runOnSCC(CallGraphSCC &SCC) override;
     static char ID; // Pass identification, replacement for typeid
-    explicit SYCLArgsFlattening(unsigned maxElements = 30000)
+    explicit SYCLArgsFlattening(unsigned maxElements = 0)
         : CallGraphSCCPass(ID), maxElements(maxElements) {
       initializeSYCLArgsFlatteningPass(*PassRegistry::getPassRegistry());
     }
@@ -330,8 +330,7 @@ PromoteArguments(CallGraphNode *CGN, CallGraph &CG,
     // pass the elements, which is always safe, if the passed value is densely
     // packed or if we can prove the padding bytes are never accessed. This does
     // not apply to inalloca.
-    bool isSafeToPromote = sycl::isKernel(*F) ||
-      (PtrArg->hasByValAttr() &&
+    bool isSafeToPromote = (PtrArg->hasByValAttr() &&
        (isDenselyPacked(AgTy, DL) || !canPaddingBeAccessed(PtrArg)));
     if (isSafeToPromote) {
       if (StructType *STy = dyn_cast<StructType>(AgTy)) {

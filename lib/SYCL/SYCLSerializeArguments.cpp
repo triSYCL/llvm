@@ -7,15 +7,40 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Replace a SYCL kernel code by a function serializing its arguments
+// Replace a SYCL kernel code by a function serializing its arguments and
+// calling the kernel.
+//
+// Now the kernel argument serialization & kernel call are done by the outside.
+//
+// Basically we look for the functions containing a call to a kernel and we
+// transform
+// \code
+//   tail call void @_ZN2cl4sycl6detail22set_kernel_task_markerERNS1_4taskE(%"struct.cl::sycl::detail::task"* nonnull dereferenceable(240) %24)
+//   %25 = getelementptr inbounds %class.anon.439, %class.anon.439* %1, i64 0, i32 1
+//   tail call fastcc void @"_ZN2cl4sycl6detail18instantiate_kernelIZZ9test_mainiPPcENK3$_1clERNS0_7handlerEE3addZZ9test_mainiS4_ENKS5_clES7_EUlvE_EEvT0_"(%class.anon.433* byval nonnull align 8 %25)
+// \endcode
+// into
+// \code
+//   %26 = addrspacecast i32 addrspace(1)* %.idx.val to i8*
+//   call void @_ZN2cl4sycl3drt13serialize_argERNS0_6detail4taskEmPvm(%"struct.cl::sycl::detail::task"* %24, i64 0, i8* %26, i64 4)
+//   %27 = addrspacecast i32 addrspace(1)* %.idx1.val to i8*
+//   call void @_ZN2cl4sycl3drt13serialize_argERNS0_6detail4taskEmPvm(%"struct.cl::sycl::detail::task"* %24, i64 1, i8* %27, i64 4)
+//   call void @_ZN2cl4sycl3drt13launch_kernelERNS0_6detail4taskEPKc(%"struct.cl::sycl::detail::task"* %24, i8* getelementptr inbounds ([173 x i8], [173 x i8]* @0, i32 0, i32 0))
+// \endcode
+// by including also the effect of the SYCLArgsFlattening pass.
+//
 // ===---------------------------------------------------------------------===//
 
 #include <cstddef>
+#include <functional>
+#include <utility>
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Instructions.h"
@@ -46,6 +71,20 @@ namespace {
 struct SYCLSerializeArguments : public ModulePass {
 
   static char ID; // Pass identification, replacement for typeid
+
+
+  /// The mangled name of the function marking the task to be used to launch the
+  /// kernel.
+  ///
+  /// Note that it has to be defined in some include files so this pass can
+  /// find it.
+  ///
+  /// The function is defined
+  /// in triSYCL/include/CL/sycl/detail/instantiate_kernel.hpp
+  ///
+  /// extern void set_kernel_task_marker(detail::task &task)
+  static auto constexpr SetKernelTaskFunctionName =
+    "_ZN2cl4sycl6detail22set_kernel_task_markerERNS1_4taskE";
 
 
   /// The mangled name of the serialization function to use.
@@ -99,20 +138,26 @@ struct SYCLSerializeArguments : public ModulePass {
   }
 
 
-  /// Replace the kernel instructions by the serialization of its arguments
-  void serializeKernelArguments(Function &F) {
+  /// Replace the kernel call instructions by the serialization of its arguments
+  void serializeKernelArguments(Function &F, Instruction &KernelCall) {
     ++SYCLKernelProcessed;
 
-    // Remove the code of the kernel first
-    F.dropAllReferences();
-    assert(F.empty() && "There should be no basic block left");
-
-    // Insert the serialization code in its own basic block
-    BasicBlock * BB = BasicBlock::Create(F.getContext(),
-                                         "Serialize",
-                                         &F);
-    // Use an IRBuilder to ease IR creation in the basic block
-    IRBuilder<> Builder(BB);
+    // Find the call to \c set_kernel_task() in before the kernel call
+    Instruction *SetKernelTaskInstruction = nullptr;
+    CallSite SetKernelTaskCS;
+    for (auto I = (&KernelCall)->getPrevNode(); I; I = I->getPrevNode())
+      if (auto CS = CallSite { I }) {
+        auto CF = CS.getCalledFunction();
+        // Is this a call to the right function?
+        if (CF->hasName() && CF->getName().str() == SetKernelTaskFunctionName) {
+          SetKernelTaskInstruction = I;
+          SetKernelTaskCS = CS;
+          break;
+        }
+      }
+    assert(SetKernelTaskInstruction
+           && "There should a call to set_kernel_task_marker()"
+           "before the call to the kernel");
 
     // Need the data layout of the target to measure object size
     auto DL = F.getParent()->getDataLayout();
@@ -122,15 +167,21 @@ struct SYCLSerializeArguments : public ModulePass {
       .lookup(SerializationFunctionName);
     assert(SF && "Serialization function not found");
 
-    // An iterator pointing to the first function argument
-    auto A = F.arg_begin();
-    // The first argument is the cl::sycl::detail::task address
-    auto &Task = *A++;
+    /* Get the cl::sycl::detail::task address which is passed as the argument of
+       the marking function */
+    auto &Task = *SetKernelTaskCS.getArgument(0);
 
+    // Use an IRBuilder to ease IR creation in the basic block
+    auto BB = KernelCall.getParent();
+    IRBuilder<> Builder { BB };
+    // Insert the future new instructions before the current kernel call
+    Builder.SetInsertPoint(&KernelCall);
+
+    CallSite KernelCallSite { &KernelCall };
     // The index used to number the arguments in the serialization
     std::size_t IndexNumber = 0;
-    // Deal with the remaining arguments
-    for (; A != F.arg_end(); ++A) {
+    // Iterate on the kernel call arguments
+    for (auto &A : KernelCallSite.args()) {
       DEBUG(dbgs() << "Serializing '" << A->getName() << "'.\n");
       DEBUG(dbgs() << "Size '" << DL.getTypeAllocSize(A->getType()) << "'.\n");
       // An IR version of the index number
@@ -175,7 +226,7 @@ struct SYCLSerializeArguments : public ModulePass {
     assert(KLF && "Kernel launching function not found");
 
     // Create a global string variable with the name of the kernel itself
-    // and return an char * on it
+    // and return a char * on it
     auto Name = Builder.CreateGlobalStringPtr(F.getName());
 
     // Add the launching of the kernel
@@ -183,23 +234,37 @@ struct SYCLSerializeArguments : public ModulePass {
     // \todo add an initializer list to makeArrayRef
     Builder.CreateCall(KLF, makeArrayRef(Args));
 
-    // Add a "ret void" as the function terminator.
-    // Assume the return type of a kernel is void.
-    Builder.CreateRetVoid();
+    // Now remove the marking function and the initial kernel call
+    SetKernelTaskInstruction->eraseFromParent();
+    KernelCall.eraseFromParent();
   }
 
 
   /// Visit all the functions of the module
   bool runOnModule(Module &M) override {
+    // First find the kernel calling side independently to avoid rewriting the
+    // world we iterate on
+    SmallVector<std::pair<std::reference_wrapper<Function>,
+                          std::reference_wrapper<Instruction>>,
+                8> KernelCallSites;
     for (auto &F : M.functions()) {
-      // Only consider definition of SYCL kernels
-      if (!F.isDeclaration() && sycl::isKernel(F))
-          serializeKernelArguments(F);
+      // Look for calls by this function
+      for (BasicBlock &BB : F)
+        for (Instruction &I : BB)
+          if (auto CS = CallSite { &I })
+            // If we call a kernel, it is a kernel call site
+            if (auto CF = CS.getCalledFunction())
+              if (sycl::isKernel(*CF))
+                KernelCallSites.emplace_back(F, I);
     }
+    // Then serialize the calls to the detected kernels
+    for (auto &KernelCall : KernelCallSites)
+      serializeKernelArguments(KernelCall.first, KernelCall.second);
 
-    // The module probably changed
-    return true;
+    // The module changed if there were some kernels
+    return !KernelCallSites.empty();
   }
+
 };
 
 }

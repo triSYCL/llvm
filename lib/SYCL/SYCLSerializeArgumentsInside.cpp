@@ -114,7 +114,7 @@ struct SYCLSerializeArgumentsInside : public ModulePass {
                                          "Serialize",
                                          &F);
     // Use an IRBuilder to ease IR creation in the basic block
-    IRBuilder<> Builder(BB);
+    IRBuilder<> Builder { BB };
 
     // Need the data layout of the target to measure object size
     auto DL = F.getParent()->getDataLayout();
@@ -177,7 +177,7 @@ struct SYCLSerializeArgumentsInside : public ModulePass {
     assert(KLF && "Kernel launching function not found");
 
     // Create a global string variable with the name of the kernel itself
-    // and return an char * on it
+    // and return a char * on it
     auto Name = Builder.CreateGlobalStringPtr(F.getName());
 
     // Add the launching of the kernel

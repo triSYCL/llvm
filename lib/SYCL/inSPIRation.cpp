@@ -182,39 +182,39 @@ struct inSPIRation : public ModulePass {
   }
 
 
-/// Add metadata for the SPIR 2.0 version
-void setSPIRVersion(Module &M) {
-  /* Get inSPIRation from SPIRTargetCodeGenInfo::emitTargetMD in
-     tools/clang/lib/CodeGen/TargetInfo.cpp */
-  auto &Ctx = M.getContext();
-  auto Int32Ty = llvm::Type::getInt32Ty(Ctx);
-  // SPIR v2.0 s2.12 - The SPIR version used by the module is stored in the
-  // opencl.spir.version named metadata.
-  llvm::Metadata *SPIRVerElts[] = {
-    llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(Int32Ty, 2)),
-    llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(Int32Ty, 0))
-  };
-  M.getOrInsertNamedMetadata("opencl.spir.version")
-    ->addOperand(llvm::MDNode::get(Ctx, SPIRVerElts));
-}
+  /// Add metadata for the SPIR 2.0 version
+  void setSPIRVersion(Module &M) {
+    /* Get inSPIRation from SPIRTargetCodeGenInfo::emitTargetMD in
+       tools/clang/lib/CodeGen/TargetInfo.cpp */
+    auto &Ctx = M.getContext();
+    auto Int32Ty = llvm::Type::getInt32Ty(Ctx);
+    // SPIR v2.0 s2.12 - The SPIR version used by the module is stored in the
+    // opencl.spir.version named metadata.
+    llvm::Metadata *SPIRVerElts[] = {
+      llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(Int32Ty, 2)),
+      llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(Int32Ty, 0))
+    };
+    M.getOrInsertNamedMetadata("opencl.spir.version")
+      ->addOperand(llvm::MDNode::get(Ctx, SPIRVerElts));
+  }
 
 
-/// Add metadata for the OpenCL 1.2 version
-void setOpenCLVersion(Module &M) {
-  /* Get inSPIRation from SPIRTargetCodeGenInfo::emitTargetMD in
-     tools/clang/lib/CodeGen/TargetInfo.cpp */
-  auto &Ctx = M.getContext();
-  auto Int32Ty = llvm::Type::getInt32Ty(Ctx);
-  // SPIR v2.0 s2.13 - The OpenCL version used by the module is stored in the
-  // opencl.ocl.version named metadata node.
-  llvm::Metadata *OCLVerElts[] = {
-    llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(Int32Ty, 1)),
-    llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(Int32Ty, 2))
-  };
-  llvm::NamedMDNode *OCLVerMD =
+  /// Add metadata for the OpenCL 1.2 version
+  void setOpenCLVersion(Module &M) {
+    /* Get inSPIRation from SPIRTargetCodeGenInfo::emitTargetMD in
+       tools/clang/lib/CodeGen/TargetInfo.cpp */
+    auto &Ctx = M.getContext();
+    auto Int32Ty = llvm::Type::getInt32Ty(Ctx);
+    // SPIR v2.0 s2.13 - The OpenCL version used by the module is stored in the
+    // opencl.ocl.version named metadata node.
+    llvm::Metadata *OCLVerElts[] = {
+      llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(Int32Ty, 1)),
+      llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(Int32Ty, 2))
+    };
+    llvm::NamedMDNode *OCLVerMD =
       M.getOrInsertNamedMetadata("opencl.ocl.version");
-  OCLVerMD->addOperand(llvm::MDNode::get(Ctx, OCLVerElts));
-}
+    OCLVerMD->addOperand(llvm::MDNode::get(Ctx, OCLVerElts));
+  }
 
 
   /// Visit all the functions of the module

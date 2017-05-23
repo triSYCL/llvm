@@ -126,6 +126,8 @@ struct inSPIRation : public ModulePass {
     SmallVector<llvm::Metadata *, 8> Types;
     // MDNode for the kernel argument type qualifiers
     SmallVector<llvm::Metadata *, 8> TypeQuals;
+    // MDNode for the kernel argument access qualifiers
+    SmallVector<llvm::Metadata *, 8> AccessQuals;
 
     for (auto &A : F.args()) {
       std::string TypeName;
@@ -154,6 +156,9 @@ struct inSPIRation : public ModulePass {
       // \todo Deal with pipes
       TypeQuals.push_back(llvm::MDString::get(Ctx, TypeQual));
 
+      // \todo Deal with kernel arg access qual
+      AccessQuals.push_back(llvm::MDString::get(Ctx, "read_write"));
+
       if (auto PTy = dyn_cast<PointerType>(A.getType())) {
         // Add numeric value of the address space as address qualifier
         AddressSpaceQuals.push_back(
@@ -180,6 +185,10 @@ struct inSPIRation : public ModulePass {
 
     // Add the SPIR metadata describing the type qualifier of each argument
     F.setMetadata("kernel_arg_type_qual", llvm::MDNode::get(Ctx, TypeQuals));
+
+    // Add the SPIR metadata describing the access qualifier of each argument
+    F.setMetadata("kernel_arg_access_qual",
+                  llvm::MDNode::get(Ctx, AccessQuals));
   }
 
 

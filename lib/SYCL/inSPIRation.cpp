@@ -18,6 +18,7 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/Constants.h"
@@ -217,6 +218,12 @@ struct inSPIRation : public ModulePass {
   }
 
 
+  /// Set the output Triple to SPIR
+  void setSPIRTriple(Module &M) {
+    M.setTargetTriple("spir64");
+  }
+
+
   /// Visit all the functions of the module
   bool runOnModule(Module &M) override {
     for (auto &F : M.functions()) {
@@ -229,6 +236,10 @@ struct inSPIRation : public ModulePass {
     setSPIRVersion(M);
 
     setOpenCLVersion(M);
+
+    setSPIRTriple(M);
+
+    //setSPIRLayout(M);
 
     // The module probably changed
     return true;

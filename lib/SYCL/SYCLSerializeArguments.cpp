@@ -113,10 +113,10 @@ struct SYCLSerializeArguments : public ModulePass {
   /// in triSYCL/include/CL/sycl/device_runtime.hpp
   ///
   /// TRISYCL_WEAK_ATTRIB_PREFIX void TRISYCL_WEAK_ATTRIB_SUFFIX
-  /// launch_kernel(detail::task &task,
-  ///               const char *kernel_name)
-  static auto constexpr KernelLaunchingFunctionName =
-    "_ZN2cl4sycl3drt13launch_kernelERNS0_6detail4taskEPKc";
+  /// set_kernel(detail::task &task,
+  ///            const char *kernel_name)
+  static auto constexpr SetKernelFunctionName =
+    "_ZN2cl4sycl3drt10set_kernelERNS0_6detail4taskEPKc";
 
 
   SYCLSerializeArguments() : ModulePass(ID) {}
@@ -177,6 +177,20 @@ struct SYCLSerializeArguments : public ModulePass {
     // Insert the future new instructions before the current kernel call
     Builder.SetInsertPoint(&KernelCall);
 
+    // Get the predefined kernel setting function to use
+    auto SKF = F.getParent()->getValueSymbolTable()
+      .lookup(SetKernelFunctionName);
+    assert(SKF && "Kernel setting function not found");
+
+    // Create a global string variable with the name of the kernel itself
+    // and return a char * on it
+    auto Name = Builder.CreateGlobalStringPtr(F.getName());
+
+    // Add the setting of the kernel
+    Value * Args[] { &Task, Name };
+    // \todo add an initializer list to makeArrayRef
+    Builder.CreateCall(SKF, makeArrayRef(Args));
+
     CallSite KernelCallSite { &KernelCall };
     // The index used to number the arguments in the serialization
     std::size_t IndexNumber = 0;
@@ -219,20 +233,6 @@ struct SYCLSerializeArguments : public ModulePass {
       }
       ++IndexNumber;
     }
-
-    // Get the predefined kernel launching function to use
-    auto KLF = F.getParent()->getValueSymbolTable()
-      .lookup(KernelLaunchingFunctionName);
-    assert(KLF && "Kernel launching function not found");
-
-    // Create a global string variable with the name of the kernel itself
-    // and return a char * on it
-    auto Name = Builder.CreateGlobalStringPtr(F.getName());
-
-    // Add the launching of the kernel
-    Value * Args[] { &Task, Name };
-    // \todo add an initializer list to makeArrayRef
-    Builder.CreateCall(KLF, makeArrayRef(Args));
 
     // Now remove the marking function and the initial kernel call
     SetKernelTaskInstruction->eraseFromParent();

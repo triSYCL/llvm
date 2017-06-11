@@ -12,13 +12,14 @@ endif()
 
 add_llvm_loadable_module( SYCL
   ItaniumDemangle.cpp
-  inSPIRation.cpp
   SYCL-annotation.cpp
   SYCLArgsFlattening.cpp
   SYCLKernel.cpp
   SYCLKernelFilter.cpp
   SYCLSerializeArguments.cpp
   SYCLSerializeArgumentsInside.cpp
+  inSPIRation.cpp
+  remove_global_empty_cdtors.cpp
 
   DEPENDS
   intrinsics_gen

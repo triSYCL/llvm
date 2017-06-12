@@ -68,9 +68,12 @@ struct SYCLKernelFilter : public ModulePass {
   }
 
 
-  /// Mark kernels as external so the GlobalDCE pass will keep them
+  /// Mark kernels as external so the GlobalDCE pass will keep them and rename
+  /// them to a simpler SPIR-compatible name, just in case...
   void handleKernel(Function &F) {
     F.setLinkage(GlobalValue::LinkageTypes::ExternalLinkage);
+    // Rename the kernel to a simpler unique name
+    F.setName(sycl::registerSYCLKernelAndGetShortName(F.getName()));
     SYCLKernelFound++;
   }
 

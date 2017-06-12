@@ -11,6 +11,10 @@
 // ===------------------------------------------------------------------- -===//
 
 #include <cstdlib>
+#include <map>
+#include <sstream>
+#include <string>
+
 #include "llvm/ADT/StringRef.h"
 // Wait for LLVM 4.0...
 // #include "llvm/Demangle/Demangle.h"
@@ -52,6 +56,43 @@ bool isKernel(const Function &F) {
   }
   free(Demangled);
   return KernelFound;
+}
+
+
+/// Mapping from the full kernel mangle named to a unique integer ID
+std::map<std::string, std::size_t> SimplerKernelNames;
+
+/// The kernel ID to use, counting from 0
+std::size_t NextKernelID = 0;
+
+
+/// Register a kernel with its full name and returns its ID
+///
+/// If the kernel is already registered, do not register it again.
+std::size_t registerSYCLKernel(const std::string &LongKernelName) {
+  auto Translation = SimplerKernelNames.emplace(LongKernelName, NextKernelID);
+  /// If a new kernel has been registered, then compute the next ID to use
+  if (Translation.second)
+    ++NextKernelID;
+  // Return the ID for the kernel
+  return Translation.first->second;
+}
+
+
+/// Construct a kernel short name for an ID
+std::string constructSYCLKernelShortName(std::size_t Id) {
+  std::stringstream S;
+  S << "_TRISYCL_kernel_" << Id;
+  return S.str();
+}
+
+
+/// Register a kernel with its full name and returns its short name
+///
+/// If the kernel is already registered, do not register it again.
+std::string
+registerSYCLKernelAndGetShortName(const std::string &LongKernelName) {
+  return constructSYCLKernelShortName(registerSYCLKernel(LongKernelName));
 }
 
 }

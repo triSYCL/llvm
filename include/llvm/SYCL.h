@@ -14,6 +14,8 @@
 #define LLVM_SYCL_H
 
 #include <cstddef>
+#include <string>
+
 #include "llvm/IR/Function.h"
 
 namespace llvm {
@@ -21,6 +23,21 @@ namespace sycl {
 
 /// Test if a function is a SYCL kernel
 bool isKernel(const Function &F);
+
+/// Register a kernel with its full name and returns its ID
+///
+/// If the kernel is already registered, do not register it again.
+std::size_t registerSYCLKernel(const std::string &LongKernelName);
+
+/// Construct a kernel short name for an ID
+std::string constructSYCLKernelShortName(std::size_t Id);
+
+/// Register a kernel with its full name and returns its short name
+///
+/// If the kernel is already registered, do not register it again.
+std::string
+registerSYCLKernelAndGetShortName(const std::string &LongKernelName);
+
 
 /// This is a llvm local version of __cxa_demangle. Other than the name and
 /// being in the llvm namespace it is identical.

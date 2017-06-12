@@ -9,6 +9,12 @@
 //
 // Detect SYCL kernels based on annotation
 //
+// This expect in the C++ runtime something like:
+// \code
+// __attribute__((annotate("__triSYCL_kernel")))
+// \endcode
+// to mark kernels
+//
 //===----------------------------------------------------------------------===//
 
 #include <string>

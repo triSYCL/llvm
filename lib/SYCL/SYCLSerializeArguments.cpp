@@ -77,8 +77,8 @@ struct SYCLSerializeArguments : public ModulePass {
   /// Note that it has to be defined in some include files so this pass can
   /// find it.
   ///
-  /// The function is defined
-  /// in triSYCL/include/CL/sycl/detail/instantiate_kernel.hpp
+  /// The function is defined in
+  /// triSYCL/include/CL/sycl/detail/instantiate_kernel.hpp
   ///
   /// extern void set_kernel_task_marker(detail::task &task)
   static auto constexpr SetKernelTaskMarkerFunctionName =
@@ -90,8 +90,8 @@ struct SYCLSerializeArguments : public ModulePass {
   /// Note that it has to be defined in some include files so this pass can use
   /// it.
   ///
-  /// The function is defined
-  /// in triSYCL/include/CL/sycl/device_runtime.hpp
+  /// The function is defined in
+  /// triSYCL/include/CL/sycl/device_runtime.hpp
   ///
   /// TRISYCL_WEAK_ATTRIB_PREFIX void TRISYCL_WEAK_ATTRIB_SUFFIX
   /// serialize_arg(detail::task &task,
@@ -107,14 +107,15 @@ struct SYCLSerializeArguments : public ModulePass {
   /// Note that it has to be defined in some include files so this pass can use
   /// it.
   ///
-  /// The function is defined
-  /// in triSYCL/include/CL/sycl/device_runtime.hpp
+  /// The function is defined in
+  /// triSYCL/include/CL/sycl/device_runtime.hpp
   ///
   /// TRISYCL_WEAK_ATTRIB_PREFIX void TRISYCL_WEAK_ATTRIB_SUFFIX
   /// set_kernel(detail::task &task,
-  ///            const char *kernel_name)
+  ///            const char *kernel_name,
+  ///            const char *kernel_short_name)
   static auto constexpr SetKernelFunctionName =
-    "_ZN2cl4sycl3drt10set_kernelERNS0_6detail4taskEPKc";
+    "_ZN2cl4sycl3drt10set_kernelERNS0_6detail4taskEPKcS6_";
 
 
   SYCLSerializeArguments() : ModulePass(ID) {}
@@ -264,9 +265,13 @@ struct SYCLSerializeArguments : public ModulePass {
     // Create a global string variable with the name of the kernel itself
     // and return a char * on it
     auto Name = Builder.CreateGlobalStringPtr(KernelName);
+    // Create a a global string variable with the short name of the kernel
+    // itself and return a char * on it
+    auto ShortName = Builder.CreateGlobalStringPtr(
+        sycl::registerSYCLKernelAndGetShortName(KernelName));
 
     // Add the setting of the kernel
-    Value * Args[] { &Task, Name };
+    Value * Args[] { &Task, Name, ShortName };
     // \todo add an initializer list to makeArrayRef
     Builder.CreateCall(SKF, makeArrayRef(Args));
     // Now that we have used the task parameter, we can discard the useless

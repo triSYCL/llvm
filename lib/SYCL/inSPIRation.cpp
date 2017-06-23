@@ -239,7 +239,7 @@ struct inSPIRation : public ModulePass {
       // Only consider definition of SYCL kernels
       // \todo Put SPIR calling convention on declarations too
       if (!F.isDeclaration() && sycl::isKernel(F))
-          kernelSPIRify(F);
+        kernelSPIRify(F);
     }
 
     setSPIRVersion(M);

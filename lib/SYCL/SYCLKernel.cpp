@@ -7,11 +7,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Detect SYCL kernels
+// Detect SYCL kernels and rename kernel too shorten unique names
 // ===------------------------------------------------------------------- -===//
 
 #include <cstdlib>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <string>
 
@@ -34,27 +35,39 @@ namespace sycl {
 /// is used as marker to detect the kernel functions
 StringRef SYCLKernelPrefix { "void cl::sycl::detail::instantiate_kernel<" };
 
+/// For some implementations, rename the kernels with shorter and cleaner names
+/// starting with this prefix
+std::string SYCLKernelShortPrefix { "_TRISYCL_kernel_" };
+
 /// Test if a function is a SYCL kernel
 bool isKernel(const Function &F) {
-  if (!F.hasName())
-    return false;
+  auto lookForKernel = [&] {
+    if (!F.hasName())
+      return false;
 
-  bool KernelFound = false;
-  // Demangle C++ name for human beings
-  int Status;
-  char *Demangled = itaniumDemangle(F.getName().str().c_str(),
-                                    nullptr,
-                                    nullptr,
-                                    &Status);
-  if (Demangled) {
-    DEBUG(errs() << " Demangled: " << Demangled << "\n");
-    // A kernel is just a function starting with the well known name
-    if (StringRef { Demangled }.startswith(SYCLKernelPrefix)) {
-      DEBUG(errs() << "\n\tKernel found!\n\n");
-      KernelFound = true;
+    if (F.getName().startswith(SYCLKernelShortPrefix))
+      return true;
+
+    // Demangle C++ name for human beings
+    int Status;
+    // Use a \c unique_ptr to deallocate memory on exit
+    std::unique_ptr<const char> Demangled {
+      itaniumDemangle(F.getName().str().c_str(),
+                      nullptr,
+                      nullptr,
+                      &Status) };
+    if (Demangled) {
+      DEBUG(errs() << " Demangled: " << Demangled.get() << "\n");
+      // A kernel is just a function starting with the well known name
+      return StringRef { Demangled.get() }.startswith(SYCLKernelPrefix);
     }
-  }
-  free(Demangled);
+    return false;
+  };
+
+  auto KernelFound = lookForKernel();
+  DEBUG(if (KernelFound)
+          errs() << "\n\tKernel found!\n\n");
+
   return KernelFound;
 }
 
@@ -82,7 +95,7 @@ std::size_t registerSYCLKernel(const std::string &LongKernelName) {
 /// Construct a kernel short name for an ID
 std::string constructSYCLKernelShortName(std::size_t Id) {
   std::stringstream S;
-  S << "_TRISYCL_kernel_" << Id;
+  S << SYCLKernelShortPrefix << Id;
   return S.str();
 }
 

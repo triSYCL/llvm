@@ -23,7 +23,7 @@
 //   call void @_ZN2cl4sycl3drt10set_kernelERNS0_6detail4taskEPKc(%"struct.cl::sycl::detail::task"* %t, i8* getelementptr inbounds ([94 x i8], [94 x i8]* @0, i32 0, i32 0))
 // [...]
 //   %15 = bitcast i32* %agg.tmp.idx.val.idx.val.c to i8*
-//   call void @_ZN2cl4sycl3drt13serialize_argERNS0_6detail4taskEmPvm(%"struct.cl::sycl::detail::task"* %t, i64 0, i8* %15, i64 4)
+//   call void @_ZN2cl4sycl3drt22serialize_accessor_argERNS0_6detail4taskEmPvm(%"struct.cl::sycl::detail::task"* %t, i64 0, i8* %15, i64 4)
 // \endcode
 // by including also the effect of the SYCLArgsFlattening pass.
 //
@@ -80,7 +80,9 @@ struct SYCLSerializeArguments : public ModulePass {
   /// The function is defined in
   /// triSYCL/include/CL/sycl/detail/instantiate_kernel.hpp
   ///
+  /// \code
   /// extern void set_kernel_task_marker(detail::task &task)
+  /// \endcode
   static auto constexpr SetKernelTaskMarkerFunctionName =
     "_ZN2cl4sycl6detail22set_kernel_task_markerERNS1_4taskE";
 
@@ -93,13 +95,34 @@ struct SYCLSerializeArguments : public ModulePass {
   /// The function is defined in
   /// triSYCL/include/CL/sycl/device_runtime.hpp
   ///
+  /// \code
   /// TRISYCL_WEAK_ATTRIB_PREFIX void TRISYCL_WEAK_ATTRIB_SUFFIX
   /// serialize_arg(detail::task &task,
   ///               std::size_t index,
   ///               void *arg,
   ///               std::size_t arg_size)
+  /// \endcode
   static auto constexpr SerializationFunctionName =
     "_ZN2cl4sycl3drt13serialize_argERNS0_6detail4taskEmPvm";
+
+
+  /// The mangled name of the serialization function to use.
+  ///
+  /// Note that it has to be defined in some include files so this pass can use
+  /// it.
+  ///
+  /// The function is defined in
+  /// triSYCL/include/CL/sycl/device_runtime.hpp
+  ///
+  /// \code
+  /// TRISYCL_WEAK_ATTRIB_PREFIX void TRISYCL_WEAK_ATTRIB_SUFFIX
+  /// serialize_accessor_arg(detail::task &task,
+  ///                        std::size_t index,
+  ///                        void *arg,
+  ///                        std::size_t arg_size)
+  /// \endcode
+  static auto constexpr AccessorSerializationFunctionName =
+    "_ZN2cl4sycl3drt22serialize_accessor_argERNS0_6detail4taskEmPvm";
 
 
   /// The mangled name of the kernel launching function to use.
@@ -110,10 +133,12 @@ struct SYCLSerializeArguments : public ModulePass {
   /// The function is defined in
   /// triSYCL/include/CL/sycl/device_runtime.hpp
   ///
+  /// \endcode
   /// TRISYCL_WEAK_ATTRIB_PREFIX void TRISYCL_WEAK_ATTRIB_SUFFIX
   /// set_kernel(detail::task &task,
   ///            const char *kernel_name,
   ///            const char *kernel_short_name)
+  /// \endcode
   static auto constexpr SetKernelFunctionName =
     "_ZN2cl4sycl3drt10set_kernelERNS0_6detail4taskEPKcS6_";
 
@@ -157,9 +182,12 @@ struct SYCLSerializeArguments : public ModulePass {
     auto M = F.getParent();
     auto DL = M->getDataLayout();
 
-    // Get the predefined serialization function to use
+    // Get the predefined serialization functions to use
     auto SF = M->getValueSymbolTable().lookup(SerializationFunctionName);
     assert(SF && "Serialization function not found");
+    auto ASF =
+      M->getValueSymbolTable().lookup(AccessorSerializationFunctionName);
+    assert(ASF && "Accessor serialization function not found");
 
     // Use an IRBuilder to ease IR creation in the basic block
     auto BB = KernelCall.getParent();
@@ -190,7 +218,7 @@ struct SYCLSerializeArguments : public ModulePass {
         // arguments
         Value * Args[] { &Task, Index, Arg, Builder.getInt64(ArgSize) };
         // \todo add an initializer list to makeArrayRef
-        Builder.CreateCall(SF, makeArrayRef(Args));
+        Builder.CreateCall(ASF, makeArrayRef(Args));
       }
       else {
         // Create an intermediate memory place to pass the value by address

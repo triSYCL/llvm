@@ -20,7 +20,8 @@
 #include <string>
 
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Demangle/Demangle.h"
+// Wait for LLVM 4.0...
+// #include "llvm/Demangle/Demangle.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalValue.h"
@@ -28,6 +29,7 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
+#include "llvm/SYCL.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
@@ -76,10 +78,10 @@ struct SYCL_annotation : public BasicBlockPass {
         // Demangle C++ name for human beings
         int Status;
         char *Demangled =
-          itaniumDemangle(II->getFunction()->getName().str().c_str(),
-                          nullptr,
-                          nullptr,
-                          &Status);
+        llvm::sycl::itaniumDemangle(II->getFunction()->getName().str().c_str(),
+                                    nullptr,
+                                    nullptr,
+                                    &Status);
         if (Demangled)
           errs() << " Demangled: " << Demangled << '\n';
         free(Demangled);

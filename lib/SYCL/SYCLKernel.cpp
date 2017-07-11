@@ -37,7 +37,7 @@ StringRef SYCLKernelPrefix { "void cl::sycl::detail::instantiate_kernel<" };
 
 /// For some implementations, rename the kernels with shorter and cleaner names
 /// starting with this prefix
-std::string SYCLKernelShortPrefix { "_TRISYCL_kernel_" };
+std::string SYCLKernelShortPrefix { "TRISYCL_kernel_" };
 
 /// Test if a function is a SYCL kernel
 bool isKernel(const Function &F) {

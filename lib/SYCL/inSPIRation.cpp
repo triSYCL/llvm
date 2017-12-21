@@ -45,7 +45,7 @@ STATISTIC(SYCLKernelProcessed, "Number of SYCL kernel functions processed");
 // namespace
 namespace {
 
-/// Replace a SYCL kernel code by a function serializing its arguments
+/// Transorm the SYCL kernel functions into SPIR-compatible kernels
 struct inSPIRation : public ModulePass {
 
   static char ID; // Pass identification, replacement for typeid
@@ -104,7 +104,7 @@ struct inSPIRation : public ModulePass {
   }
 
 
-  /// Replace the kernel instructions by the serialization of its arguments
+  /// Transorm a function into a SPIR-compatible kernel
   void kernelSPIRify(Function &F) {
     ++SYCLKernelProcessed;
 
@@ -115,7 +115,7 @@ struct inSPIRation : public ModulePass {
     F.setPersonalityFn(nullptr);
 
     /* Add kernel metadata inSPIRed from GenOpenCLArgMetadata() in
-       /tools/clang/lib/CodeGen/CodeGenFunction.cpp */
+       tools/clang/lib/CodeGen/CodeGenFunction.cpp */
 
     auto &Ctx = F.getContext();
     auto Int32Ty = llvm::Type::getInt32Ty(Ctx);
@@ -260,5 +260,5 @@ struct inSPIRation : public ModulePass {
 char inSPIRation::ID = 0;
 static RegisterPass<inSPIRation> X {
   "inSPIRation",
-  "pass to make functions and kernels SPIR compatible"
+  "pass to make functions and kernels SPIR-compatible"
  };

@@ -43,7 +43,7 @@ using namespace llvm;
 STATISTIC(SYCLKernelProcessed, "Number of SYCL kernel functions processed");
 STATISTIC(SYCLFuncCalledInKernelFound, "Number of functions directly or indirectly called by SYCL kernel functions");
 
-cl::opt<bool> ReqdWorkGroupSizeFPGA("reqd-workgroup-size-fpga", cl::desc("set reqd_work_group_size to be 1-1-1"));
+cl::opt<bool> ReqdWorkGroupSizeOne("reqd-workgroup-size-1", cl::desc("set reqd_work_group_size to be 1-1-1"));
 
 // Put the code in an anonymous namespace to avoid polluting the global
 // namespace
@@ -203,7 +203,7 @@ struct inSPIRation : public ModulePass {
     F.setMetadata("kernel_arg_access_qual",
                   llvm::MDNode::get(Ctx, AccessQuals));
 
-    if (ReqdWorkGroupSizeFPGA) {
+    if (ReqdWorkGroupSizeOne) {
       // Add the SPIR metadata for required work group size
       F.setMetadata("reqd_work_group_size",
                     llvm::MDNode::get(Ctx, ReqdWorkGroupSize));

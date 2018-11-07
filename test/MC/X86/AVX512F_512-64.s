@@ -776,6 +776,10 @@ vblendmpd 485498096{1to8}, %zmm19, %zmm19
 // CHECK: encoding: [0x62,0xe2,0xe5,0x52,0x65,0x1c,0x25,0xf0,0x1c,0xf0,0x1c]     
 vblendmpd 485498096{1to8}, %zmm19, %zmm19 {%k2} 
 
+// CHECK: vblendmpd 485498096{1to8}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0xe5,0xd2,0x65,0x1c,0x25,0xf0,0x1c,0xf0,0x1c]     
+vblendmpd 485498096{1to8}, %zmm19, %zmm19 {%k2} {z}
+
 // CHECK: vblendmpd 485498096, %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0xe5,0x40,0x65,0x1c,0x25,0xf0,0x1c,0xf0,0x1c]      
 vblendmpd 485498096, %zmm19, %zmm19 
@@ -796,6 +800,10 @@ vblendmpd 512(%rdx){1to8}, %zmm19, %zmm19
 // CHECK: encoding: [0x62,0xe2,0xe5,0x52,0x65,0x5a,0x40]     
 vblendmpd 512(%rdx){1to8}, %zmm19, %zmm19 {%k2} 
 
+// CHECK: vblendmpd 512(%rdx){1to8}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0xe5,0xd2,0x65,0x5a,0x40]     
+vblendmpd 512(%rdx){1to8}, %zmm19, %zmm19 {%k2} {z}
+
 // CHECK: vblendmpd 512(%rdx,%rax){1to8}, %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0xe5,0x50,0x65,0x5c,0x02,0x40]      
 vblendmpd 512(%rdx,%rax){1to8}, %zmm19, %zmm19 
@@ -803,6 +811,10 @@ vblendmpd 512(%rdx,%rax){1to8}, %zmm19, %zmm19
 // CHECK: vblendmpd 512(%rdx,%rax){1to8}, %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xe2,0xe5,0x52,0x65,0x5c,0x02,0x40]     
 vblendmpd 512(%rdx,%rax){1to8}, %zmm19, %zmm19 {%k2} 
+
+// CHECK: vblendmpd 512(%rdx,%rax){1to8}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0xe5,0xd2,0x65,0x5c,0x02,0x40]     
+vblendmpd 512(%rdx,%rax){1to8}, %zmm19, %zmm19 {%k2} {z}
 
 // CHECK: vblendmpd 512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0xe5,0x50,0x65,0x5c,0x82,0x40]      
@@ -816,9 +828,17 @@ vblendmpd -512(%rdx,%rax,4){1to8}, %zmm19, %zmm19
 // CHECK: encoding: [0x62,0xe2,0xe5,0x52,0x65,0x5c,0x82,0x40]     
 vblendmpd 512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 {%k2} 
 
+// CHECK: vblendmpd 512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0xe5,0xd2,0x65,0x5c,0x82,0x40]     
+vblendmpd 512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 {%k2} {z}
+
 // CHECK: vblendmpd -512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xe2,0xe5,0x52,0x65,0x5c,0x82,0xc0]     
 vblendmpd -512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 {%k2} 
+
+// CHECK: vblendmpd -512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0xe5,0xd2,0x65,0x5c,0x82,0xc0]     
+vblendmpd -512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 {%k2} {z}
 
 // CHECK: vblendmpd (%rdx){1to8}, %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0xe5,0x50,0x65,0x1a]      
@@ -827,6 +847,10 @@ vblendmpd (%rdx){1to8}, %zmm19, %zmm19
 // CHECK: vblendmpd (%rdx){1to8}, %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xe2,0xe5,0x52,0x65,0x1a]     
 vblendmpd (%rdx){1to8}, %zmm19, %zmm19 {%k2} 
+
+// CHECK: vblendmpd (%rdx){1to8}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0xe5,0xd2,0x65,0x1a]     
+vblendmpd (%rdx){1to8}, %zmm19, %zmm19 {%k2} {z}
 
 // CHECK: vblendmpd (%rdx), %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0xe5,0x40,0x65,0x1a]      
@@ -860,6 +884,10 @@ vblendmps 256(%rdx){1to16}, %zmm19, %zmm19
 // CHECK: encoding: [0x62,0xe2,0x65,0x52,0x65,0x5a,0x40]     
 vblendmps 256(%rdx){1to16}, %zmm19, %zmm19 {%k2} 
 
+// CHECK: vblendmps 256(%rdx){1to16}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0x65,0xd2,0x65,0x5a,0x40]     
+vblendmps 256(%rdx){1to16}, %zmm19, %zmm19 {%k2} {z}
+
 // CHECK: vblendmps 256(%rdx,%rax){1to16}, %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0x65,0x50,0x65,0x5c,0x02,0x40]      
 vblendmps 256(%rdx,%rax){1to16}, %zmm19, %zmm19 
@@ -867,6 +895,10 @@ vblendmps 256(%rdx,%rax){1to16}, %zmm19, %zmm19
 // CHECK: vblendmps 256(%rdx,%rax){1to16}, %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xe2,0x65,0x52,0x65,0x5c,0x02,0x40]     
 vblendmps 256(%rdx,%rax){1to16}, %zmm19, %zmm19 {%k2} 
+
+// CHECK: vblendmps 256(%rdx,%rax){1to16}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0x65,0xd2,0x65,0x5c,0x02,0x40]     
+vblendmps 256(%rdx,%rax){1to16}, %zmm19, %zmm19 {%k2} {z}
 
 // CHECK: vblendmps 256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0x65,0x50,0x65,0x5c,0x82,0x40]      
@@ -880,9 +912,17 @@ vblendmps -256(%rdx,%rax,4){1to16}, %zmm19, %zmm19
 // CHECK: encoding: [0x62,0xe2,0x65,0x52,0x65,0x5c,0x82,0x40]     
 vblendmps 256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 {%k2} 
 
+// CHECK: vblendmps 256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0x65,0xd2,0x65,0x5c,0x82,0x40]     
+vblendmps 256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 {%k2} {z}
+
 // CHECK: vblendmps -256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xe2,0x65,0x52,0x65,0x5c,0x82,0xc0]     
 vblendmps -256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 {%k2} 
+
+// CHECK: vblendmps -256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0x65,0xd2,0x65,0x5c,0x82,0xc0]     
+vblendmps -256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 {%k2} {z}
 
 // CHECK: vblendmps 4096(%rdx,%rax,4), %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0x65,0x40,0x65,0x5c,0x82,0x40]      
@@ -940,6 +980,10 @@ vblendmps 485498096{1to16}, %zmm19, %zmm19
 // CHECK: encoding: [0x62,0xe2,0x65,0x52,0x65,0x1c,0x25,0xf0,0x1c,0xf0,0x1c]     
 vblendmps 485498096{1to16}, %zmm19, %zmm19 {%k2} 
 
+// CHECK: vblendmps 485498096{1to16}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0x65,0xd2,0x65,0x1c,0x25,0xf0,0x1c,0xf0,0x1c]     
+vblendmps 485498096{1to16}, %zmm19, %zmm19 {%k2} {z}
+
 // CHECK: vblendmps 485498096, %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0x65,0x40,0x65,0x1c,0x25,0xf0,0x1c,0xf0,0x1c]      
 vblendmps 485498096, %zmm19, %zmm19 
@@ -959,6 +1003,10 @@ vblendmps (%rdx){1to16}, %zmm19, %zmm19
 // CHECK: vblendmps (%rdx){1to16}, %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xe2,0x65,0x52,0x65,0x1a]     
 vblendmps (%rdx){1to16}, %zmm19, %zmm19 {%k2} 
+
+// CHECK: vblendmps (%rdx){1to16}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0x65,0xd2,0x65,0x1a]     
+vblendmps (%rdx){1to16}, %zmm19, %zmm19 {%k2} {z}
 
 // CHECK: vblendmps (%rdx), %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0x65,0x40,0x65,0x1a]      
@@ -14896,15 +14944,15 @@ vmovapd (%rdx), %zmm19 {%k2}
 // CHECK: encoding: [0x62,0xe1,0xfd,0xca,0x28,0x1a]     
 vmovapd (%rdx), %zmm19 {%k2} {z} 
 
-// CHECK: vmovapd.s %zmm19, %zmm19 
+// CHECK: vmovapd %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xa1,0xfd,0x48,0x29,0xdb]       
 vmovapd.s %zmm19, %zmm19 
 
-// CHECK: vmovapd.s %zmm19, %zmm19 {%k2} 
+// CHECK: vmovapd %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xa1,0xfd,0x4a,0x29,0xdb]      
 vmovapd.s %zmm19, %zmm19 {%k2} 
 
-// CHECK: vmovapd.s %zmm19, %zmm19 {%k2} {z} 
+// CHECK: vmovapd %zmm19, %zmm19 {%k2} {z} 
 // CHECK: encoding: [0x62,0xa1,0xfd,0xca,0x29,0xdb]     
 vmovapd.s %zmm19, %zmm19 {%k2} {z} 
 
@@ -15040,15 +15088,15 @@ vmovaps (%rdx), %zmm19 {%k2}
 // CHECK: encoding: [0x62,0xe1,0x7c,0xca,0x28,0x1a]     
 vmovaps (%rdx), %zmm19 {%k2} {z} 
 
-// CHECK: vmovaps.s %zmm19, %zmm19 
+// CHECK: vmovaps %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xa1,0x7c,0x48,0x29,0xdb]       
 vmovaps.s %zmm19, %zmm19 
 
-// CHECK: vmovaps.s %zmm19, %zmm19 {%k2} 
+// CHECK: vmovaps %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xa1,0x7c,0x4a,0x29,0xdb]      
 vmovaps.s %zmm19, %zmm19 {%k2} 
 
-// CHECK: vmovaps.s %zmm19, %zmm19 {%k2} {z} 
+// CHECK: vmovaps %zmm19, %zmm19 {%k2} {z} 
 // CHECK: encoding: [0x62,0xa1,0x7c,0xca,0x29,0xdb]     
 vmovaps.s %zmm19, %zmm19 {%k2} {z} 
 
@@ -15268,15 +15316,15 @@ vmovdqa32 (%rdx), %zmm19 {%k2}
 // CHECK: encoding: [0x62,0xe1,0x7d,0xca,0x6f,0x1a]     
 vmovdqa32 (%rdx), %zmm19 {%k2} {z} 
 
-// CHECK: vmovdqa32.s %zmm19, %zmm19 
+// CHECK: vmovdqa32 %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xa1,0x7d,0x48,0x7f,0xdb]       
 vmovdqa32.s %zmm19, %zmm19 
 
-// CHECK: vmovdqa32.s %zmm19, %zmm19 {%k2} 
+// CHECK: vmovdqa32 %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xa1,0x7d,0x4a,0x7f,0xdb]      
 vmovdqa32.s %zmm19, %zmm19 {%k2} 
 
-// CHECK: vmovdqa32.s %zmm19, %zmm19 {%k2} {z} 
+// CHECK: vmovdqa32 %zmm19, %zmm19 {%k2} {z} 
 // CHECK: encoding: [0x62,0xa1,0x7d,0xca,0x7f,0xdb]     
 vmovdqa32.s %zmm19, %zmm19 {%k2} {z} 
 
@@ -15412,15 +15460,15 @@ vmovdqa64 (%rdx), %zmm19 {%k2}
 // CHECK: encoding: [0x62,0xe1,0xfd,0xca,0x6f,0x1a]     
 vmovdqa64 (%rdx), %zmm19 {%k2} {z} 
 
-// CHECK: vmovdqa64.s %zmm19, %zmm19 
+// CHECK: vmovdqa64 %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xa1,0xfd,0x48,0x7f,0xdb]       
 vmovdqa64.s %zmm19, %zmm19 
 
-// CHECK: vmovdqa64.s %zmm19, %zmm19 {%k2} 
+// CHECK: vmovdqa64 %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xa1,0xfd,0x4a,0x7f,0xdb]      
 vmovdqa64.s %zmm19, %zmm19 {%k2} 
 
-// CHECK: vmovdqa64.s %zmm19, %zmm19 {%k2} {z} 
+// CHECK: vmovdqa64 %zmm19, %zmm19 {%k2} {z} 
 // CHECK: encoding: [0x62,0xa1,0xfd,0xca,0x7f,0xdb]     
 vmovdqa64.s %zmm19, %zmm19 {%k2} {z} 
 
@@ -15556,15 +15604,15 @@ vmovdqu32 (%rdx), %zmm19 {%k2}
 // CHECK: encoding: [0x62,0xe1,0x7e,0xca,0x6f,0x1a]     
 vmovdqu32 (%rdx), %zmm19 {%k2} {z} 
 
-// CHECK: vmovdqu32.s %zmm19, %zmm19 
+// CHECK: vmovdqu32 %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xa1,0x7e,0x48,0x7f,0xdb]       
 vmovdqu32.s %zmm19, %zmm19 
 
-// CHECK: vmovdqu32.s %zmm19, %zmm19 {%k2} 
+// CHECK: vmovdqu32 %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xa1,0x7e,0x4a,0x7f,0xdb]      
 vmovdqu32.s %zmm19, %zmm19 {%k2} 
 
-// CHECK: vmovdqu32.s %zmm19, %zmm19 {%k2} {z} 
+// CHECK: vmovdqu32 %zmm19, %zmm19 {%k2} {z} 
 // CHECK: encoding: [0x62,0xa1,0x7e,0xca,0x7f,0xdb]     
 vmovdqu32.s %zmm19, %zmm19 {%k2} {z} 
 
@@ -15700,15 +15748,15 @@ vmovdqu64 (%rdx), %zmm19 {%k2}
 // CHECK: encoding: [0x62,0xe1,0xfe,0xca,0x6f,0x1a]     
 vmovdqu64 (%rdx), %zmm19 {%k2} {z} 
 
-// CHECK: vmovdqu64.s %zmm19, %zmm19 
+// CHECK: vmovdqu64 %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xa1,0xfe,0x48,0x7f,0xdb]       
 vmovdqu64.s %zmm19, %zmm19 
 
-// CHECK: vmovdqu64.s %zmm19, %zmm19 {%k2} 
+// CHECK: vmovdqu64 %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xa1,0xfe,0x4a,0x7f,0xdb]      
 vmovdqu64.s %zmm19, %zmm19 {%k2} 
 
-// CHECK: vmovdqu64.s %zmm19, %zmm19 {%k2} {z} 
+// CHECK: vmovdqu64 %zmm19, %zmm19 {%k2} {z} 
 // CHECK: encoding: [0x62,0xa1,0xfe,0xca,0x7f,0xdb]     
 vmovdqu64.s %zmm19, %zmm19 {%k2} {z} 
 
@@ -16108,15 +16156,15 @@ vmovupd (%rdx), %zmm19 {%k2}
 // CHECK: encoding: [0x62,0xe1,0xfd,0xca,0x10,0x1a]     
 vmovupd (%rdx), %zmm19 {%k2} {z} 
 
-// CHECK: vmovupd.s %zmm19, %zmm19 
+// CHECK: vmovupd %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xa1,0xfd,0x48,0x11,0xdb]       
 vmovupd.s %zmm19, %zmm19 
 
-// CHECK: vmovupd.s %zmm19, %zmm19 {%k2} 
+// CHECK: vmovupd %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xa1,0xfd,0x4a,0x11,0xdb]      
 vmovupd.s %zmm19, %zmm19 {%k2} 
 
-// CHECK: vmovupd.s %zmm19, %zmm19 {%k2} {z} 
+// CHECK: vmovupd %zmm19, %zmm19 {%k2} {z} 
 // CHECK: encoding: [0x62,0xa1,0xfd,0xca,0x11,0xdb]     
 vmovupd.s %zmm19, %zmm19 {%k2} {z} 
 
@@ -16252,15 +16300,15 @@ vmovups (%rdx), %zmm19 {%k2}
 // CHECK: encoding: [0x62,0xe1,0x7c,0xca,0x10,0x1a]     
 vmovups (%rdx), %zmm19 {%k2} {z} 
 
-// CHECK: vmovups.s %zmm19, %zmm19 
+// CHECK: vmovups %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xa1,0x7c,0x48,0x11,0xdb]       
 vmovups.s %zmm19, %zmm19 
 
-// CHECK: vmovups.s %zmm19, %zmm19 {%k2} 
+// CHECK: vmovups %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xa1,0x7c,0x4a,0x11,0xdb]      
 vmovups.s %zmm19, %zmm19 {%k2} 
 
-// CHECK: vmovups.s %zmm19, %zmm19 {%k2} {z} 
+// CHECK: vmovups %zmm19, %zmm19 {%k2} {z} 
 // CHECK: encoding: [0x62,0xa1,0x7c,0xca,0x11,0xdb]     
 vmovups.s %zmm19, %zmm19 {%k2} {z} 
 
@@ -17988,6 +18036,10 @@ vpblendmd 256(%rdx){1to16}, %zmm19, %zmm19
 // CHECK: encoding: [0x62,0xe2,0x65,0x52,0x64,0x5a,0x40]     
 vpblendmd 256(%rdx){1to16}, %zmm19, %zmm19 {%k2} 
 
+// CHECK: vpblendmd 256(%rdx){1to16}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0x65,0xd2,0x64,0x5a,0x40]     
+vpblendmd 256(%rdx){1to16}, %zmm19, %zmm19 {%k2} {z}
+
 // CHECK: vpblendmd 256(%rdx,%rax){1to16}, %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0x65,0x50,0x64,0x5c,0x02,0x40]      
 vpblendmd 256(%rdx,%rax){1to16}, %zmm19, %zmm19 
@@ -17995,6 +18047,10 @@ vpblendmd 256(%rdx,%rax){1to16}, %zmm19, %zmm19
 // CHECK: vpblendmd 256(%rdx,%rax){1to16}, %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xe2,0x65,0x52,0x64,0x5c,0x02,0x40]     
 vpblendmd 256(%rdx,%rax){1to16}, %zmm19, %zmm19 {%k2} 
+
+// CHECK: vpblendmd 256(%rdx,%rax){1to16}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0x65,0xd2,0x64,0x5c,0x02,0x40]     
+vpblendmd 256(%rdx,%rax){1to16}, %zmm19, %zmm19 {%k2} {z}
 
 // CHECK: vpblendmd 256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0x65,0x50,0x64,0x5c,0x82,0x40]      
@@ -18008,9 +18064,17 @@ vpblendmd -256(%rdx,%rax,4){1to16}, %zmm19, %zmm19
 // CHECK: encoding: [0x62,0xe2,0x65,0x52,0x64,0x5c,0x82,0x40]     
 vpblendmd 256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 {%k2} 
 
+// CHECK: vpblendmd 256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0x65,0xd2,0x64,0x5c,0x82,0x40]     
+vpblendmd 256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 {%k2} {z}
+
 // CHECK: vpblendmd -256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xe2,0x65,0x52,0x64,0x5c,0x82,0xc0]     
 vpblendmd -256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 {%k2} 
+
+// CHECK: vpblendmd -256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0x65,0xd2,0x64,0x5c,0x82,0xc0]     
+vpblendmd -256(%rdx,%rax,4){1to16}, %zmm19, %zmm19 {%k2} {z}
 
 // CHECK: vpblendmd 4096(%rdx,%rax,4), %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0x65,0x40,0x64,0x5c,0x82,0x40]      
@@ -18068,6 +18132,10 @@ vpblendmd 485498096{1to16}, %zmm19, %zmm19
 // CHECK: encoding: [0x62,0xe2,0x65,0x52,0x64,0x1c,0x25,0xf0,0x1c,0xf0,0x1c]     
 vpblendmd 485498096{1to16}, %zmm19, %zmm19 {%k2} 
 
+// CHECK: vpblendmd 485498096{1to16}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0x65,0xd2,0x64,0x1c,0x25,0xf0,0x1c,0xf0,0x1c]     
+vpblendmd 485498096{1to16}, %zmm19, %zmm19 {%k2} {z}
+
 // CHECK: vpblendmd 485498096, %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0x65,0x40,0x64,0x1c,0x25,0xf0,0x1c,0xf0,0x1c]      
 vpblendmd 485498096, %zmm19, %zmm19 
@@ -18087,6 +18155,10 @@ vpblendmd (%rdx){1to16}, %zmm19, %zmm19
 // CHECK: vpblendmd (%rdx){1to16}, %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xe2,0x65,0x52,0x64,0x1a]     
 vpblendmd (%rdx){1to16}, %zmm19, %zmm19 {%k2} 
+
+// CHECK: vpblendmd (%rdx){1to16}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0x65,0xd2,0x64,0x1a]     
+vpblendmd (%rdx){1to16}, %zmm19, %zmm19 {%k2} {z}
 
 // CHECK: vpblendmd (%rdx), %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0x65,0x40,0x64,0x1a]      
@@ -18168,6 +18240,10 @@ vpblendmq 485498096{1to8}, %zmm19, %zmm19
 // CHECK: encoding: [0x62,0xe2,0xe5,0x52,0x64,0x1c,0x25,0xf0,0x1c,0xf0,0x1c]     
 vpblendmq 485498096{1to8}, %zmm19, %zmm19 {%k2} 
 
+// CHECK: vpblendmd (%rdx){1to16}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0x65,0xd2,0x64,0x1a]     
+vpblendmd (%rdx){1to16}, %zmm19, %zmm19 {%k2} {z}
+
 // CHECK: vpblendmq 485498096, %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0xe5,0x40,0x64,0x1c,0x25,0xf0,0x1c,0xf0,0x1c]      
 vpblendmq 485498096, %zmm19, %zmm19 
@@ -18188,6 +18264,10 @@ vpblendmq 512(%rdx){1to8}, %zmm19, %zmm19
 // CHECK: encoding: [0x62,0xe2,0xe5,0x52,0x64,0x5a,0x40]     
 vpblendmq 512(%rdx){1to8}, %zmm19, %zmm19 {%k2} 
 
+// CHECK: vpblendmq 512(%rdx){1to8}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0xe5,0xd2,0x64,0x5a,0x40]     
+vpblendmq 512(%rdx){1to8}, %zmm19, %zmm19 {%k2} {z}
+
 // CHECK: vpblendmq 512(%rdx,%rax){1to8}, %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0xe5,0x50,0x64,0x5c,0x02,0x40]      
 vpblendmq 512(%rdx,%rax){1to8}, %zmm19, %zmm19 
@@ -18195,6 +18275,10 @@ vpblendmq 512(%rdx,%rax){1to8}, %zmm19, %zmm19
 // CHECK: vpblendmq 512(%rdx,%rax){1to8}, %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xe2,0xe5,0x52,0x64,0x5c,0x02,0x40]     
 vpblendmq 512(%rdx,%rax){1to8}, %zmm19, %zmm19 {%k2} 
+
+// CHECK: vpblendmq 512(%rdx,%rax){1to8}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0xe5,0xd2,0x64,0x5c,0x02,0x40]     
+vpblendmq 512(%rdx,%rax){1to8}, %zmm19, %zmm19 {%k2} {z}
 
 // CHECK: vpblendmq 512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0xe5,0x50,0x64,0x5c,0x82,0x40]      
@@ -18208,9 +18292,17 @@ vpblendmq -512(%rdx,%rax,4){1to8}, %zmm19, %zmm19
 // CHECK: encoding: [0x62,0xe2,0xe5,0x52,0x64,0x5c,0x82,0x40]     
 vpblendmq 512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 {%k2} 
 
+// CHECK: vpblendmq 512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0xe5,0xd2,0x64,0x5c,0x82,0x40]     
+vpblendmq 512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 {%k2} {z}
+
 // CHECK: vpblendmq -512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 {%k2} 
 // CHECK: encoding: [0x62,0xe2,0xe5,0x52,0x64,0x5c,0x82,0xc0]     
 vpblendmq -512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 {%k2} 
+
+// CHECK: vpblendmq -512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 {%k2} {z}
+// CHECK: encoding: [0x62,0xe2,0xe5,0xd2,0x64,0x5c,0x82,0xc0]     
+vpblendmq -512(%rdx,%rax,4){1to8}, %zmm19, %zmm19 {%k2} {z}
 
 // CHECK: vpblendmq (%rdx){1to8}, %zmm19, %zmm19 
 // CHECK: encoding: [0x62,0xe2,0xe5,0x50,0x64,0x1a]      

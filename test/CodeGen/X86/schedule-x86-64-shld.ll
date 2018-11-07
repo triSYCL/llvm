@@ -103,7 +103,7 @@ define i64 @rshift10(i64 %a, i64 %b) nounwind readnone {
 ; BTVER2-LABEL: rshift10:
 ; BTVER2:       # %bb.0: # %entry
 ; BTVER2-NEXT:    shrq $62, %rdi # sched: [1:0.50]
-; BTVER2-NEXT:    leaq (%rdi,%rsi,4), %rax # sched: [1:0.50]
+; BTVER2-NEXT:    leaq (%rdi,%rsi,4), %rax # sched: [2:1.00]
 ; BTVER2-NEXT:    retq # sched: [4:1.00]
 ;
 ; BDVER1-LABEL: rshift10:
@@ -403,7 +403,7 @@ define void @lshift_mem_b(i64 %b) nounwind readnone {
 ; GENERIC:       # %bb.0: # %entry
 ; GENERIC-NEXT:    movq {{.*}}(%rip), %rax # sched: [5:0.50]
 ; GENERIC-NEXT:    shrdq $54, %rdi, %rax # sched: [2:0.67]
-; GENERIC-NEXT:    movq %rax, {{.*}}(%rip) # sched: [5:1.00]
+; GENERIC-NEXT:    movq %rax, {{.*}}(%rip) # sched: [1:1.00]
 ; GENERIC-NEXT:    retq # sched: [1:1.00]
 ;
 ; BTVER2-LABEL: lshift_mem_b:
@@ -437,7 +437,7 @@ define void @lshift_mem_b_optsize(i64 %b) nounwind readnone optsize {
 ; GENERIC:       # %bb.0: # %entry
 ; GENERIC-NEXT:    movq {{.*}}(%rip), %rax # sched: [5:0.50]
 ; GENERIC-NEXT:    shrdq $54, %rdi, %rax # sched: [2:0.67]
-; GENERIC-NEXT:    movq %rax, {{.*}}(%rip) # sched: [5:1.00]
+; GENERIC-NEXT:    movq %rax, {{.*}}(%rip) # sched: [1:1.00]
 ; GENERIC-NEXT:    retq # sched: [1:1.00]
 ;
 ; BTVER2-LABEL: lshift_mem_b_optsize:

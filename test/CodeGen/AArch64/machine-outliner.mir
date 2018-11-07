@@ -1,4 +1,4 @@
-# RUN: llc -mtriple=aarch64--- -run-pass=machine-outliner -verify-machineinstrs %s -o - | FileCheck %s
+# RUN: llc -mtriple=aarch64--- -run-pass=prologepilog -run-pass=machine-outliner -verify-machineinstrs %s -o - | FileCheck %s
 --- |
 
   @x = common global i32 0, align 4
@@ -28,19 +28,19 @@
 # CHECK-LABEL: name: main
 
 # CHECK: BL @OUTLINED_FUNCTION_[[F0:[0-9]+]]
-# CHECK-NEXT: early-clobber $sp, $lr = LDRXpost $sp, 16
+# CHECK-NEXT: $lr = ORRXrs $xzr, $x[[REG:[0-9]+]], 0
 # CHECK-NEXT: $x16 = ADDXri $sp, 48, 0
 # CHECK-NEXT: STRHHroW $w16, $x9, $w30, 1, 1
 # CHECK-NEXT: $lr = ORRXri $xzr, 1
 
 # CHECK: BL @OUTLINED_FUNCTION_[[F0]]
-# CHECK-NEXT: early-clobber $sp, $lr = LDRXpost $sp, 16
+# CHECK-NEXT: $lr = ORRXrs $xzr, $x[[REG]], 0
 # CHECK-NEXT: $x16 = ADDXri $sp, 48, 0
 # CHECK-NEXT: STRHHroW $w16, $x9, $w30, 1, 1
 # CHECK-NEXT: $lr = ORRXri $xzr, 1
 
 # CHECK: BL @OUTLINED_FUNCTION_[[F0]]
-# CHECK-NEXT: early-clobber $sp, $lr = LDRXpost $sp, 16
+# CHECK-NEXT: $lr = ORRXrs $xzr, $x[[REG]], 0
 # CHECK-NEXT: $x16 = ADDXri $sp, 48, 0
 # CHECK-NEXT: STRHHroW $w16, $x9, $w30, 1, 1
 # CHECK-NEXT: $lr = ORRXri $xzr, 1
@@ -100,12 +100,14 @@ body:             |
 ...
 ---
 # This test ensures that we can avoid saving LR when it's available.
+# It also makes sure that KILL instructions don't impact outlining.
 # CHECK-LABEL: bb.1:
 # CHECK-NOT: BL @baz, implicit-def dead $lr, implicit $sp
 # CHECK: BL @OUTLINED_FUNCTION_[[F1:[0-9]+]], implicit-def $lr, implicit $sp
 # CHECK-NEXT: $w17 = ORRWri $wzr, 2
 # CHECK-NEXT: BL @OUTLINED_FUNCTION_[[F1]], implicit-def $lr, implicit $sp
 # CHECK-NEXT: $w8 = ORRWri $wzr, 0
+# CHECK-NOT: $w17 = KILL renamable $w17, implicit killed $w17
 name:            bar
 tracksRegLiveness: true
 body:             |
@@ -118,9 +120,12 @@ body:             |
     BL @baz, implicit-def dead $lr, implicit $sp
     $w17 = ORRWri $wzr, 1
     $w17 = ORRWri $wzr, 1
+    $w17 = KILL renamable $w17, implicit killed $w17
     $w17 = ORRWri $wzr, 1
     $w17 = ORRWri $wzr, 1
     BL @baz, implicit-def dead $lr, implicit $sp
+    $w17 = ORRWri $wzr, 1
+    $w17 = ORRWri $wzr, 1
     $w17 = ORRWri $wzr, 2
     BL @baz, implicit-def dead $lr, implicit $sp
     $w17 = ORRWri $wzr, 1
@@ -128,6 +133,8 @@ body:             |
     $w17 = ORRWri $wzr, 1
     $w17 = ORRWri $wzr, 1
     BL @baz, implicit-def dead $lr, implicit $sp
+    $w17 = ORRWri $wzr, 1
+    $w17 = ORRWri $wzr, 1
     $w8 = ORRWri $wzr, 0
     
   bb.2:

@@ -12,16 +12,16 @@
 //===----------------------------------------------------------------------===//
 
 def isGCN : Predicate<"Subtarget->getGeneration() "
-                      ">= SISubtarget::SOUTHERN_ISLANDS">,
+                      ">= AMDGPUSubtarget::SOUTHERN_ISLANDS">,
             AssemblerPredicate<"FeatureGCN">;
 def isSI : Predicate<"Subtarget->getGeneration() "
-                      "== SISubtarget::SOUTHERN_ISLANDS">,
+                      "== AMDGPUSubtarget::SOUTHERN_ISLANDS">,
            AssemblerPredicate<"FeatureSouthernIslands">;
 
 
 class InstSI <dag outs, dag ins, string asm = "",
               list<dag> pattern = []> :
-  AMDGPUInst<outs, ins, asm, pattern>, PredicateControl {
+  AMDGPUInst<outs, ins, asm, pattern>, GCNPredicateControl {
   let SubtargetPredicate = isGCN;
 
   // Low bits - basic encoding information.
@@ -118,8 +118,8 @@ class InstSI <dag outs, dag ins, string asm = "",
   // This bit indicates that this is a packed VOP3P instruction
   field bit IsPacked = 0;
 
-  // This bit indicates that this is a D16 instruction.
-  field bit D16 = 0;
+  // This bit indicates that this is a D16 buffer instruction.
+  field bit D16Buf = 0;
 
   // These need to be kept in sync with the enum in SIInstrFlags.
   let TSFlags{0} = SALU;
@@ -176,7 +176,7 @@ class InstSI <dag outs, dag ins, string asm = "",
 
   let TSFlags{49} = IsPacked;
 
-  let TSFlags{50} = D16;
+  let TSFlags{50} = D16Buf;
 
   let SchedRW = [Write32Bit];
 
@@ -186,6 +186,9 @@ class InstSI <dag outs, dag ins, string asm = "",
 
   let isAsmParserOnly = !if(!eq(DisableDecoder{0}, {0}), 0, 1);
   let AsmVariantName = AMDGPUAsmVariants.Default;
+
+  // Avoid changing source registers in a way that violates constant bus read limitations.
+  let hasExtraSrcRegAllocReq = !if(VOP1,1,!if(VOP2,1,!if(VOP3,1,!if(VOPC,1,!if(SDWA,1, !if(VALU,1,0))))));
 }
 
 class PseudoInstSI<dag outs, dag ins, list<dag> pattern = [], string asm = "">
@@ -203,8 +206,6 @@ class VPseudoInstSI<dag outs, dag ins, list<dag> pattern = [], string asm = "">
   : PseudoInstSI<outs, ins, pattern, asm> {
   let VALU = 1;
   let Uses = [EXEC];
-  // Avoid changing source registers in a way that violates constant bus read limitations.
-  let hasExtraSrcRegAllocReq = 1;
 }
 
 class CFPseudoInstSI<dag outs, dag ins, list<dag> pattern = [],
@@ -254,7 +255,7 @@ class MIMGe <bits<7> op> : Enc64 {
   bits<1> tfe;
   bits<1> lwe;
   bits<1> slc;
-  bits<1> d16 = 0;
+  bit d16;
   bits<8> vaddr;
   bits<7> srsrc;
   bits<7> ssamp;
@@ -318,6 +319,7 @@ class VINTRPCommon <dag outs, dag ins, string asm, list<dag> pattern> :
   let mayLoad = 0;
   let mayStore = 0;
   let hasSideEffects = 0;
+  let VALU = 1;
 }
 
 class EXPCommon<dag outs, dag ins, string asm, list<dag> pattern> :
@@ -332,15 +334,3 @@ class EXPCommon<dag outs, dag ins, string asm, list<dag> pattern> :
 }
 
 } // End Uses = [EXEC]
-
-class MIMG <dag outs, dag ins, string asm, list<dag> pattern> :
-    InstSI <outs, ins, asm, pattern> {
-
-  let VM_CNT = 1;
-  let EXP_CNT = 1;
-  let MIMG = 1;
-  let Uses = [EXEC];
-
-  let UseNamedOperandTable = 1;
-  let hasSideEffects = 0; // XXX ????
-}

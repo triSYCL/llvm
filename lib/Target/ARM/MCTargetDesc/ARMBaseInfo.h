@@ -98,6 +98,20 @@ namespace ARM_MB {
   }
 } // namespace ARM_MB
 
+namespace ARM_TSB {
+  enum TraceSyncBOpt {
+    CSYNC = 0
+  };
+
+  inline static const char *TraceSyncBOptToString(unsigned val) {
+    switch (val) {
+    default:
+      llvm_unreachable("Unknown trace synchronization barrier operation");
+      case CSYNC: return "csync";
+    }
+  }
+} // namespace ARM_TSB
+
 namespace ARM_ISB {
   enum InstSyncBOpt {
     RESERVED_0 = 0,
@@ -187,7 +201,8 @@ namespace ARMII {
     AddrModeT2_pc   = 14, // +/- i12 for pc relative data
     AddrModeT2_i8s4 = 15, // i8 * 4
     AddrMode_i12    = 16,
-    AddrMode5FP16   = 17  // i8 * 2
+    AddrMode5FP16   = 17,  // i8 * 2
+    AddrModeT2_ldrex = 18, // i8 * 4, with unscaled offset in MCInst
   };
 
   inline static const char *AddrModeToString(AddrMode addrmode) {
@@ -210,6 +225,7 @@ namespace ARMII {
     case AddrModeT2_pc:   return "AddrModeT2_pc";
     case AddrModeT2_i8s4: return "AddrModeT2_i8s4";
     case AddrMode_i12:    return "AddrMode_i12";
+    case AddrModeT2_ldrex:return "AddrModeT2_ldrex";
     }
   }
 

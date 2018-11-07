@@ -43,21 +43,6 @@ void RISCVFrameLowering::determineFrameLayout(MachineFunction &MF) const {
   uint64_t StackAlign = RI->needsStackRealignment(MF) ? MFI.getMaxAlignment()
                                                       : getStackAlignment();
 
-  // Get the maximum call frame size of all the calls.
-  uint64_t MaxCallFrameSize = MFI.getMaxCallFrameSize();
-
-  // If we have dynamic alloca then MaxCallFrameSize needs to be aligned so
-  // that allocations will be aligned.
-  if (MFI.hasVarSizedObjects())
-    MaxCallFrameSize = alignTo(MaxCallFrameSize, StackAlign);
-
-  // Update maximum call frame size.
-  MFI.setMaxCallFrameSize(MaxCallFrameSize);
-
-  // Include call frame size in total.
-  if (!(hasReservedCallFrame(MF) && MFI.adjustsStack()))
-    FrameSize += MaxCallFrameSize;
-
   // Make sure the frame is aligned.
   FrameSize = alignTo(FrameSize, StackAlign);
 
@@ -227,6 +212,36 @@ void RISCVFrameLowering::determineCalleeSaves(MachineFunction &MF,
     SavedRegs.set(RISCV::X1);
     SavedRegs.set(RISCV::X8);
   }
+
+  // If interrupt is enabled and there are calls in the handler,
+  // unconditionally save all Caller-saved registers and
+  // all FP registers, regardless whether they are used.
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+
+  if (MF.getFunction().hasFnAttribute("interrupt") && MFI.hasCalls()) {
+
+    static const MCPhysReg CSRegs[] = { RISCV::X1,      /* ra */
+      RISCV::X5, RISCV::X6, RISCV::X7,                  /* t0-t2 */
+      RISCV::X10, RISCV::X11,                           /* a0-a1, a2-a7 */
+      RISCV::X12, RISCV::X13, RISCV::X14, RISCV::X15, RISCV::X16, RISCV::X17,
+      RISCV::X28, RISCV::X29, RISCV::X30, RISCV::X31, 0 /* t3-t6 */
+    };
+
+    for (unsigned i = 0; CSRegs[i]; ++i)
+      SavedRegs.set(CSRegs[i]);
+
+    if (MF.getSubtarget<RISCVSubtarget>().hasStdExtD() ||
+        MF.getSubtarget<RISCVSubtarget>().hasStdExtF()) {
+
+      // If interrupt is enabled, this list contains all FP registers.
+      const MCPhysReg * Regs = MF.getRegInfo().getCalleeSavedRegs();
+
+      for (unsigned i = 0; Regs[i]; ++i)
+        if (RISCV::FPR32RegClass.contains(Regs[i]) ||
+            RISCV::FPR64RegClass.contains(Regs[i]))
+          SavedRegs.set(Regs[i]);
+    }
+  }
 }
 
 void RISCVFrameLowering::processFunctionBeforeFrameFinalized(
@@ -245,4 +260,40 @@ void RISCVFrameLowering::processFunctionBeforeFrameFinalized(
         RegInfo->getSpillSize(*RC), RegInfo->getSpillAlignment(*RC), false);
     RS->addScavengingFrameIndex(RegScavFI);
   }
+}
+
+// Not preserve stack space within prologue for outgoing variables when the
+// function contains variable size objects and let eliminateCallFramePseudoInstr
+// preserve stack space for it.
+bool RISCVFrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {
+  return !MF.getFrameInfo().hasVarSizedObjects();
+}
+
+// Eliminate ADJCALLSTACKDOWN, ADJCALLSTACKUP pseudo instructions.
+MachineBasicBlock::iterator RISCVFrameLowering::eliminateCallFramePseudoInstr(
+    MachineFunction &MF, MachineBasicBlock &MBB,
+    MachineBasicBlock::iterator MI) const {
+  unsigned SPReg = RISCV::X2;
+  DebugLoc DL = MI->getDebugLoc();
+
+  if (!hasReservedCallFrame(MF)) {
+    // If space has not been reserved for a call frame, ADJCALLSTACKDOWN and
+    // ADJCALLSTACKUP must be converted to instructions manipulating the stack
+    // pointer. This is necessary when there is a variable length stack
+    // allocation (e.g. alloca), which means it's not possible to allocate
+    // space for outgoing arguments from within the function prologue.
+    int64_t Amount = MI->getOperand(0).getImm();
+
+    if (Amount != 0) {
+      // Ensure the stack remains aligned after adjustment.
+      Amount = alignSPAdjust(Amount);
+
+      if (MI->getOpcode() == RISCV::ADJCALLSTACKDOWN)
+        Amount = -Amount;
+
+      adjustReg(MBB, MI, DL, SPReg, SPReg, Amount, MachineInstr::NoFlags);
+    }
+  }
+
+  return MBB.erase(MI);
 }

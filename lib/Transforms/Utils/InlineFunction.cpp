@@ -29,6 +29,7 @@
 #include "llvm/Analysis/EHPersonalities.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/ProfileSummaryInfo.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/BasicBlock.h"
@@ -60,7 +61,6 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Transforms/Utils/Cloning.h"
-#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/ValueMapper.h"
 #include <algorithm>
 #include <cassert>
@@ -1199,7 +1199,7 @@ static void UpdateCallGraphAfterInlining(CallSite CS,
     // Only copy the edge if the call was inlined!
     if (VMI == VMap.end() || VMI->second == nullptr)
       continue;
-    
+
     // If the call was inlined, but then constant folded, there is no edge to
     // add.  Check for this case.
     Instruction *NewCall = dyn_cast<Instruction>(VMI->second);
@@ -1211,7 +1211,7 @@ static void UpdateCallGraphAfterInlining(CallSite CS,
     CallSite CS = CallSite(NewCall);
     if (CS && CS.getCalledFunction() && CS.getCalledFunction()->isIntrinsic())
       continue;
-    
+
     // Remember that this call site got inlined for the client of
     // InlineFunction.
     IFI.InlinedCalls.push_back(NewCall);
@@ -1231,7 +1231,7 @@ static void UpdateCallGraphAfterInlining(CallSite CS,
 
     CallerNode->addCalledFunction(CallSite(NewCall), I->second);
   }
-  
+
   // Update the call graph by deleting the edge from Callee to Caller.  We must
   // do this after the loop above in case Caller and Callee are the same.
   CallerNode->removeCallEdgeFor(CS);
@@ -1248,7 +1248,7 @@ static void HandleByValArgumentInit(Value *Dst, Value *Src, Module *M,
   // Always generate a memcpy of alignment 1 here because we don't know
   // the alignment of the src pointer.  Other optimizations can infer
   // better alignment.
-  Builder.CreateMemCpy(Dst, Src, Size, /*Align=*/1);
+  Builder.CreateMemCpy(Dst, /*DstAlign*/1, Src, /*SrcAlign*/1, Size);
 }
 
 /// When inlining a call site that has a byval argument,
@@ -1380,7 +1380,7 @@ static void fixupLineNumbers(Function *Fn, Function::iterator FI,
 
       if (CalleeHasDebugInfo)
         continue;
-      
+
       // If the inlined instruction has no line number, make it look as if it
       // originates from the call location. This is important for
       // ((__always_inline__, __nodebug__)) functions which must use caller
@@ -1569,7 +1569,7 @@ bool llvm::InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
   Instruction *CallSiteEHPad = nullptr;
   if (CallerPersonality) {
     EHPersonality Personality = classifyEHPersonality(CallerPersonality);
-    if (isFuncletEHPersonality(Personality)) {
+    if (isScopedEHPersonality(Personality)) {
       Optional<OperandBundleUse> ParentFunclet =
           CS.getOperandBundle(LLVMContext::OB_funclet);
       if (ParentFunclet)
@@ -1777,7 +1777,7 @@ bool llvm::InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
          E = FirstNewBlock->end(); I != E; ) {
       AllocaInst *AI = dyn_cast<AllocaInst>(I++);
       if (!AI) continue;
-      
+
       // If the alloca is now dead, remove it.  This often occurs due to code
       // specialization.
       if (AI->use_empty()) {
@@ -1787,10 +1787,10 @@ bool llvm::InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
 
       if (!allocaWouldBeStaticInEntry(AI))
         continue;
-      
+
       // Keep track of the static allocas that we inline into the caller.
       IFI.StaticAllocas.push_back(AI);
-      
+
       // Scan for the block of allocas that we can move over, and move them
       // all at once.
       while (isa<AllocaInst>(I) &&
@@ -1825,6 +1825,10 @@ bool llvm::InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
     CallInst::TailCallKind CallSiteTailKind = CallInst::TCK_None;
     if (CallInst *CI = dyn_cast<CallInst>(TheCall))
       CallSiteTailKind = CI->getTailCallKind();
+
+    // For inlining purposes, the "notail" marker is the same as no marker.
+    if (CallSiteTailKind == CallInst::TCK_NoTail)
+      CallSiteTailKind = CallInst::TCK_None;
 
     for (Function::iterator BB = FirstNewBlock, E = Caller->end(); BB != E;
          ++BB) {
@@ -1885,6 +1889,8 @@ bool llvm::InlineFunction(CallSite CS, InlineFunctionInfo &IFI,
         //    f -> musttail g ->     tail f  ==>  f ->     tail f
         //    f ->          g -> musttail f  ==>  f ->          f
         //    f ->          g ->     tail f  ==>  f ->          f
+        //
+        // Inlined notail calls should remain notail calls.
         CallInst::TailCallKind ChildTCK = CI->getTailCallKind();
         if (ChildTCK != CallInst::TCK_NoTail)
           ChildTCK = std::min(CallSiteTailKind, ChildTCK);

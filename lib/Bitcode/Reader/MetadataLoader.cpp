@@ -822,6 +822,7 @@ MetadataLoader::MetadataLoaderImpl::lazyLoadModuleMetadataBlock() {
       case bitc::METADATA_TEMPLATE_VALUE:
       case bitc::METADATA_GLOBAL_VAR:
       case bitc::METADATA_LOCAL_VAR:
+      case bitc::METADATA_LABEL:
       case bitc::METADATA_EXPRESSION:
       case bitc::METADATA_OBJC_PROPERTY:
       case bitc::METADATA_IMPORTED_ENTITY:
@@ -1200,10 +1201,11 @@ Error MetadataLoader::MetadataLoaderImpl::parseOneMetadata(
     if (Record.size() != 3)
       return error("Invalid record");
 
-    IsDistinct = Record[0];
+    IsDistinct = Record[0] & 1;
+    bool IsUnsigned = Record[0] & 2;
     MetadataList.assignValue(
         GET_OR_DISTINCT(DIEnumerator, (Context, unrotateSign(Record[1]),
-                                       getMDString(Record[2]))),
+                                       IsUnsigned, getMDString(Record[2]))),
         NextMetadataNo);
     NextMetadataNo++;
     break;
@@ -1246,7 +1248,7 @@ Error MetadataLoader::MetadataLoaderImpl::parseOneMetadata(
     break;
   }
   case bitc::METADATA_COMPOSITE_TYPE: {
-    if (Record.size() != 16)
+    if (Record.size() < 16 || Record.size() > 17)
       return error("Invalid record");
 
     // If we have a UUID and this is not a forward declaration, lookup the
@@ -1269,6 +1271,7 @@ Error MetadataLoader::MetadataLoaderImpl::parseOneMetadata(
     unsigned RuntimeLang = Record[12];
     Metadata *VTableHolder = nullptr;
     Metadata *TemplateParams = nullptr;
+    Metadata *Discriminator = nullptr;
     auto *Identifier = getMDString(Record[15]);
     // If this module is being parsed so that it can be ThinLTO imported
     // into another module, composite types only need to be imported
@@ -1289,13 +1292,15 @@ Error MetadataLoader::MetadataLoaderImpl::parseOneMetadata(
       Elements = getMDOrNull(Record[11]);
       VTableHolder = getDITypeRefOrNull(Record[13]);
       TemplateParams = getMDOrNull(Record[14]);
+      if (Record.size() > 16)
+        Discriminator = getMDOrNull(Record[16]);
     }
     DICompositeType *CT = nullptr;
     if (Identifier)
       CT = DICompositeType::buildODRType(
           Context, *Identifier, Tag, Name, File, Line, Scope, BaseType,
           SizeInBits, AlignInBits, OffsetInBits, Flags, Elements, RuntimeLang,
-          VTableHolder, TemplateParams);
+          VTableHolder, TemplateParams, Discriminator);
 
     // Create a node if we didn't get a lazy ODR type.
     if (!CT)
@@ -1346,17 +1351,25 @@ Error MetadataLoader::MetadataLoaderImpl::parseOneMetadata(
   }
 
   case bitc::METADATA_FILE: {
-    if (Record.size() != 3 && Record.size() != 5)
+    if (Record.size() != 3 && Record.size() != 5 && Record.size() != 6)
       return error("Invalid record");
 
     IsDistinct = Record[0];
+    Optional<DIFile::ChecksumInfo<MDString *>> Checksum;
+    // The BitcodeWriter writes null bytes into Record[3:4] when the Checksum
+    // is not present. This matches up with the old internal representation,
+    // and the old encoding for CSK_None in the ChecksumKind. The new
+    // representation reserves the value 0 in the ChecksumKind to continue to
+    // encode None in a backwards-compatible way.
+    if (Record.size() > 4 && Record[3] && Record[4])
+      Checksum.emplace(static_cast<DIFile::ChecksumKind>(Record[3]),
+                       getMDString(Record[4]));
     MetadataList.assignValue(
         GET_OR_DISTINCT(
             DIFile,
-            (Context, getMDString(Record[1]), getMDString(Record[2]),
-             Record.size() == 3 ? DIFile::CSK_None
-                                : static_cast<DIFile::ChecksumKind>(Record[3]),
-             Record.size() == 3 ? nullptr : getMDString(Record[4]))),
+            (Context, getMDString(Record[1]), getMDString(Record[2]), Checksum,
+             Record.size() > 5 ? Optional<MDString *>(getMDString(Record[5]))
+                               : None)),
         NextMetadataNo);
     NextMetadataNo++;
     break;
@@ -1426,7 +1439,7 @@ Error MetadataLoader::MetadataLoaderImpl::parseOneMetadata(
          HasUnit ? CUorFn : nullptr,                        // unit
          getMDOrNull(Record[15 + Offset]),                  // templateParams
          getMDOrNull(Record[16 + Offset]),                  // declaration
-         getMDOrNull(Record[17 + Offset]),                  // variables
+         getMDOrNull(Record[17 + Offset]),                  // retainedNodes
          HasThrownTypes ? getMDOrNull(Record[20]) : nullptr // thrownTypes
          ));
     MetadataList.assignValue(SP, NextMetadataNo);
@@ -1631,6 +1644,20 @@ Error MetadataLoader::MetadataLoaderImpl::parseOneMetadata(
                          getMDOrNull(Record[3 + HasTag]), Record[4 + HasTag],
                          getDITypeRefOrNull(Record[5 + HasTag]),
                          Record[6 + HasTag], Flags, AlignInBits)),
+        NextMetadataNo);
+    NextMetadataNo++;
+    break;
+  }
+  case bitc::METADATA_LABEL: {
+    if (Record.size() != 5)
+      return error("Invalid record");
+
+    IsDistinct = Record[0] & 1;
+    MetadataList.assignValue(
+        GET_OR_DISTINCT(DILabel,
+                        (Context, getMDOrNull(Record[1]),
+                         getMDString(Record[2]),
+                         getMDOrNull(Record[3]), Record[4])),
         NextMetadataNo);
     NextMetadataNo++;
     break;

@@ -43,7 +43,7 @@ static const char R11ThunkName[]    = "__llvm_retpoline_r11";
 static const char EAXThunkName[]    = "__llvm_retpoline_eax";
 static const char ECXThunkName[]    = "__llvm_retpoline_ecx";
 static const char EDXThunkName[]    = "__llvm_retpoline_edx";
-static const char PushThunkName[]   = "__llvm_retpoline_push";
+static const char EDIThunkName[]    = "__llvm_retpoline_edi";
 
 namespace {
 class X86RetpolineThunks : public MachineFunctionPass {
@@ -74,8 +74,7 @@ private:
 
   void createThunkFunction(Module &M, StringRef Name);
   void insertRegReturnAddrClobber(MachineBasicBlock &MBB, unsigned Reg);
-  void insert32BitPushReturnAddrClobber(MachineBasicBlock &MBB);
-  void populateThunk(MachineFunction &MF, Optional<unsigned> Reg = None);
+  void populateThunk(MachineFunction &MF, unsigned Reg);
 };
 
 } // end anonymous namespace
@@ -92,7 +91,7 @@ bool X86RetpolineThunks::doInitialization(Module &M) {
 }
 
 bool X86RetpolineThunks::runOnMachineFunction(MachineFunction &MF) {
-  DEBUG(dbgs() << getPassName() << '\n');
+  LLVM_DEBUG(dbgs() << getPassName() << '\n');
 
   TM = &MF.getTarget();;
   STI = &MF.getSubtarget<X86Subtarget>();
@@ -116,7 +115,9 @@ bool X86RetpolineThunks::runOnMachineFunction(MachineFunction &MF) {
     // FIXME: It's a little silly to look at every function just to enumerate
     // the subtargets, but eventually we'll want to look at them for indirect
     // calls, so maybe this is OK.
-    if (!STI->useRetpoline() || STI->useRetpolineExternalThunk())
+    if ((!STI->useRetpolineIndirectCalls() &&
+         !STI->useRetpolineIndirectBranches()) ||
+        STI->useRetpolineExternalThunk())
       return false;
 
     // Otherwise, we need to insert the thunk.
@@ -127,7 +128,7 @@ bool X86RetpolineThunks::runOnMachineFunction(MachineFunction &MF) {
       createThunkFunction(M, R11ThunkName);
     else
       for (StringRef Name :
-           {EAXThunkName, ECXThunkName, EDXThunkName, PushThunkName})
+           {EAXThunkName, ECXThunkName, EDXThunkName, EDIThunkName})
         createThunkFunction(M, Name);
     InsertedThunks = true;
     return true;
@@ -151,9 +152,8 @@ bool X86RetpolineThunks::runOnMachineFunction(MachineFunction &MF) {
     populateThunk(MF, X86::R11);
   } else {
     // For 32-bit targets we need to emit a collection of thunks for various
-    // possible scratch registers as well as a fallback that is used when
-    // there are no scratch registers and assumes the retpoline target has
-    // been pushed.
+    // possible scratch registers as well as a fallback that uses EDI, which is
+    // normally callee saved.
     //   __llvm_retpoline_eax:
     //         calll .Leax_call_target
     //   .Leax_capture_spec:
@@ -174,32 +174,18 @@ bool X86RetpolineThunks::runOnMachineFunction(MachineFunction &MF) {
     //         movl %edx, (%esp)
     //         retl
     //
-    // This last one is a bit more special and so needs a little extra
-    // handling.
-    // __llvm_retpoline_push:
-    //         calll .Lpush_call_target
-    // .Lpush_capture_spec:
-    //         pause
-    //         lfence
-    //         jmp .Lpush_capture_spec
-    // .align 16
-    // .Lpush_call_target:
-    //         # Clear pause_loop return address.
-    //         addl $4, %esp
-    //         # Top of stack words are: Callee, RA. Exchange Callee and RA.
-    //         pushl 4(%esp)  # Push callee
-    //         pushl 4(%esp)  # Push RA
-    //         popl 8(%esp)   # Pop RA to final RA
-    //         popl (%esp)    # Pop callee to next top of stack
-    //         retl           # Ret to callee
+    //   __llvm_retpoline_edi:
+    //   ... # Same setup
+    //         movl %edi, (%esp)
+    //         retl
     if (MF.getName() == EAXThunkName)
       populateThunk(MF, X86::EAX);
     else if (MF.getName() == ECXThunkName)
       populateThunk(MF, X86::ECX);
     else if (MF.getName() == EDXThunkName)
       populateThunk(MF, X86::EDX);
-    else if (MF.getName() == PushThunkName)
-      populateThunk(MF);
+    else if (MF.getName() == EDIThunkName)
+      populateThunk(MF, X86::EDI);
     else
       llvm_unreachable("Invalid thunk name on x86-32!");
   }
@@ -230,6 +216,15 @@ void X86RetpolineThunks::createThunkFunction(Module &M, StringRef Name) {
   IRBuilder<> Builder(Entry);
 
   Builder.CreateRetVoid();
+
+  // MachineFunctions/MachineBasicBlocks aren't created automatically for the
+  // IR-level constructs we already made. Create them and insert them into the
+  // module.
+  MachineFunction &MF = MMI->getOrCreateMachineFunction(*F);
+  MachineBasicBlock *EntryMBB = MF.CreateMachineBasicBlock(Entry);
+
+  // Insert EntryMBB into MF. It's not in the module until we do this.
+  MF.insert(MF.end(), EntryMBB);
 }
 
 void X86RetpolineThunks::insertRegReturnAddrClobber(MachineBasicBlock &MBB,
@@ -240,51 +235,34 @@ void X86RetpolineThunks::insertRegReturnAddrClobber(MachineBasicBlock &MBB,
       .addReg(Reg);
 }
 
-void X86RetpolineThunks::insert32BitPushReturnAddrClobber(
-    MachineBasicBlock &MBB) {
-  // The instruction sequence we use to replace the return address without
-  // a scratch register is somewhat complicated:
-  //   # Clear capture_spec from return address.
-  //   addl $4, %esp
-  //   # Top of stack words are: Callee, RA. Exchange Callee and RA.
-  //   pushl 4(%esp)  # Push callee
-  //   pushl 4(%esp)  # Push RA
-  //   popl 8(%esp)   # Pop RA to final RA
-  //   popl (%esp)    # Pop callee to next top of stack
-  //   retl           # Ret to callee
-  BuildMI(&MBB, DebugLoc(), TII->get(X86::ADD32ri), X86::ESP)
-      .addReg(X86::ESP)
-      .addImm(4);
-  addRegOffset(BuildMI(&MBB, DebugLoc(), TII->get(X86::PUSH32rmm)), X86::ESP,
-               false, 4);
-  addRegOffset(BuildMI(&MBB, DebugLoc(), TII->get(X86::PUSH32rmm)), X86::ESP,
-               false, 4);
-  addRegOffset(BuildMI(&MBB, DebugLoc(), TII->get(X86::POP32rmm)), X86::ESP,
-               false, 8);
-  addRegOffset(BuildMI(&MBB, DebugLoc(), TII->get(X86::POP32rmm)), X86::ESP,
-               false, 0);
-}
-
 void X86RetpolineThunks::populateThunk(MachineFunction &MF,
-                                       Optional<unsigned> Reg) {
+                                       unsigned Reg) {
   // Set MF properties. We never use vregs...
   MF.getProperties().set(MachineFunctionProperties::Property::NoVRegs);
 
+  // Grab the entry MBB and erase any other blocks. O0 codegen appears to
+  // generate two bbs for the entry block.
   MachineBasicBlock *Entry = &MF.front();
   Entry->clear();
+  while (MF.size() > 1)
+    MF.erase(std::next(MF.begin()));
 
   MachineBasicBlock *CaptureSpec = MF.CreateMachineBasicBlock(Entry->getBasicBlock());
   MachineBasicBlock *CallTarget = MF.CreateMachineBasicBlock(Entry->getBasicBlock());
+  MCSymbol *TargetSym = MF.getContext().createTempSymbol();
   MF.push_back(CaptureSpec);
   MF.push_back(CallTarget);
 
   const unsigned CallOpc = Is64Bit ? X86::CALL64pcrel32 : X86::CALLpcrel32;
   const unsigned RetOpc = Is64Bit ? X86::RETQ : X86::RETL;
 
-  BuildMI(Entry, DebugLoc(), TII->get(CallOpc)).addMBB(CallTarget);
-  Entry->addSuccessor(CallTarget);
+  Entry->addLiveIn(Reg);
+  BuildMI(Entry, DebugLoc(), TII->get(CallOpc)).addSym(TargetSym);
+
+  // The MIR verifier thinks that the CALL in the entry block will fall through
+  // to CaptureSpec, so mark it as the successor. Technically, CaptureTarget is
+  // the successor, but the MIR verifier doesn't know how to cope with that.
   Entry->addSuccessor(CaptureSpec);
-  CallTarget->setHasAddressTaken();
 
   // In the capture loop for speculation, we want to stop the processor from
   // speculating as fast as possible. On Intel processors, the PAUSE instruction
@@ -300,12 +278,10 @@ void X86RetpolineThunks::populateThunk(MachineFunction &MF,
   CaptureSpec->setHasAddressTaken();
   CaptureSpec->addSuccessor(CaptureSpec);
 
+  CallTarget->addLiveIn(Reg);
+  CallTarget->setHasAddressTaken();
   CallTarget->setAlignment(4);
-  if (Reg) {
-    insertRegReturnAddrClobber(*CallTarget, *Reg);
-  } else {
-    assert(!Is64Bit && "We only support non-reg thunks on 32-bit x86!");
-    insert32BitPushReturnAddrClobber(*CallTarget);
-  }
+  insertRegReturnAddrClobber(*CallTarget, Reg);
+  CallTarget->back().setPreInstrSymbol(MF, TargetSym);
   BuildMI(CallTarget, DebugLoc(), TII->get(RetOpc));
 }

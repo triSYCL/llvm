@@ -305,8 +305,11 @@ entry:
 ; GFX9-NEXT: s_waitcnt
 ; GFX9-NEXT: s_setpc_b64
 
-; VI: flat_load_ubyte v{{[0-9]+}}
-; VI: v_or_b32_e32
+; VI: flat_load_ubyte [[LO:v[0-9]+]]
+; VI: v_lshrrev_b32_e32 [[HI:v[0-9]+]], 16, v2
+; VI: s_mov_b32 [[MASK:s[0-9]+]], 0x5040c00
+; VI: v_perm_b32 [[RES:v[0-9]+]], [[HI]], [[LO]], [[MASK]]
+; VI: flat_store_dword v[0:1], [[RES]]
 define void @load_flat_lo_v2i16_reglo_vreg_zexti8(i8* %in, i32 %reg) #0 {
 entry:
   %reg.bc = bitcast i32 %reg to <2 x i16>
@@ -559,11 +562,11 @@ entry:
 ; GFX9-NEXT: s_setpc_b64
 
 ; VI: flat_load_ushort
-define void @load_constant_lo_v2i16_reglo_vreg(i16 addrspace(2)* %in, i32 %reg) #0 {
+define void @load_constant_lo_v2i16_reglo_vreg(i16 addrspace(4)* %in, i32 %reg) #0 {
 entry:
   %reg.bc = bitcast i32 %reg to <2 x i16>
-  %gep = getelementptr inbounds i16, i16 addrspace(2)* %in, i64 -2047
-  %load = load i16, i16 addrspace(2)* %gep
+  %gep = getelementptr inbounds i16, i16 addrspace(4)* %in, i64 -2047
+  %load = load i16, i16 addrspace(4)* %gep
   %build1 = insertelement <2 x i16> %reg.bc, i16 %load, i32 0
   store <2 x i16> %build1, <2 x i16> addrspace(1)* undef
   ret void
@@ -578,11 +581,11 @@ entry:
 ; GFX9-NEXT: s_setpc_b64
 
 ; VI: flat_load_ushort
-define void @load_constant_lo_v2f16_reglo_vreg(half addrspace(2)* %in, i32 %reg) #0 {
+define void @load_constant_lo_v2f16_reglo_vreg(half addrspace(4)* %in, i32 %reg) #0 {
 entry:
   %reg.bc = bitcast i32 %reg to <2 x half>
-  %gep = getelementptr inbounds half, half addrspace(2)* %in, i64 -2047
-  %load = load half, half addrspace(2)* %gep
+  %gep = getelementptr inbounds half, half addrspace(4)* %in, i64 -2047
+  %load = load half, half addrspace(4)* %gep
   %build1 = insertelement <2 x half> %reg.bc, half %load, i32 0
   store <2 x half> %build1, <2 x half> addrspace(1)* undef
   ret void

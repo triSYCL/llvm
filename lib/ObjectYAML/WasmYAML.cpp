@@ -48,6 +48,16 @@ static void commonSectionMapping(IO &IO, WasmYAML::Section &Section) {
   IO.mapOptional("Relocations", Section.Relocations);
 }
 
+static void sectionMapping(IO &IO, WasmYAML::DylinkSection &Section) {
+  commonSectionMapping(IO, Section);
+  IO.mapRequired("Name", Section.Name);
+  IO.mapRequired("MemorySize", Section.MemorySize);
+  IO.mapRequired("MemoryAlignment", Section.MemoryAlignment);
+  IO.mapRequired("TableSize", Section.TableSize);
+  IO.mapRequired("TableAlignment", Section.TableAlignment);
+  IO.mapRequired("Needed", Section.Needed);
+}
+
 static void sectionMapping(IO &IO, WasmYAML::NameSection &Section) {
   commonSectionMapping(IO, Section);
   IO.mapRequired("Name", Section.Name);
@@ -57,8 +67,8 @@ static void sectionMapping(IO &IO, WasmYAML::NameSection &Section) {
 static void sectionMapping(IO &IO, WasmYAML::LinkingSection &Section) {
   commonSectionMapping(IO, Section);
   IO.mapRequired("Name", Section.Name);
-  IO.mapRequired("DataSize", Section.DataSize);
-  IO.mapOptional("SymbolInfo", Section.SymbolInfos);
+  IO.mapRequired("Version", Section.Version);
+  IO.mapOptional("SymbolTable", Section.SymbolTable);
   IO.mapOptional("SegmentInfo", Section.SegmentInfos);
   IO.mapOptional("InitFunctions", Section.InitFunctions);
   IO.mapOptional("Comdats", Section.Comdats);
@@ -98,6 +108,11 @@ static void sectionMapping(IO &IO, WasmYAML::MemorySection &Section) {
 static void sectionMapping(IO &IO, WasmYAML::GlobalSection &Section) {
   commonSectionMapping(IO, Section);
   IO.mapOptional("Globals", Section.Globals);
+}
+
+static void sectionMapping(IO &IO, WasmYAML::EventSection &Section) {
+  commonSectionMapping(IO, Section);
+  IO.mapOptional("Events", Section.Events);
 }
 
 static void sectionMapping(IO &IO, WasmYAML::ExportSection &Section) {
@@ -142,7 +157,11 @@ void MappingTraits<std::unique_ptr<WasmYAML::Section>>::mapping(
     } else {
       IO.mapRequired("Name", SectionName);
     }
-    if (SectionName == "linking") {
+    if (SectionName == "dylink") {
+      if (!IO.outputting())
+        Section.reset(new WasmYAML::DylinkSection());
+      sectionMapping(IO, *cast<WasmYAML::DylinkSection>(Section.get()));
+    } else if (SectionName == "linking") {
       if (!IO.outputting())
         Section.reset(new WasmYAML::LinkingSection());
       sectionMapping(IO, *cast<WasmYAML::LinkingSection>(Section.get()));
@@ -187,6 +206,11 @@ void MappingTraits<std::unique_ptr<WasmYAML::Section>>::mapping(
       Section.reset(new WasmYAML::GlobalSection());
     sectionMapping(IO, *cast<WasmYAML::GlobalSection>(Section.get()));
     break;
+  case wasm::WASM_SEC_EVENT:
+    if (!IO.outputting())
+      Section.reset(new WasmYAML::EventSection());
+    sectionMapping(IO, *cast<WasmYAML::EventSection>(Section.get()));
+    break;
   case wasm::WASM_SEC_EXPORT:
     if (!IO.outputting())
       Section.reset(new WasmYAML::ExportSection());
@@ -227,6 +251,7 @@ void ScalarEnumerationTraits<WasmYAML::SectionType>::enumeration(
   ECase(TABLE);
   ECase(MEMORY);
   ECase(GLOBAL);
+  ECase(EVENT);
   ECase(EXPORT);
   ECase(START);
   ECase(ELEM);
@@ -307,9 +332,12 @@ void MappingTraits<WasmYAML::Import>::mapping(IO &IO,
   } else if (Import.Kind == wasm::WASM_EXTERNAL_GLOBAL) {
     IO.mapRequired("GlobalType", Import.GlobalImport.Type);
     IO.mapRequired("GlobalMutable", Import.GlobalImport.Mutable);
+  } else if (Import.Kind == wasm::WASM_EXTERNAL_EVENT) {
+    IO.mapRequired("EventAttribute", Import.EventImport.Attribute);
+    IO.mapRequired("EventSigIndex", Import.EventImport.SigIndex);
   } else if (Import.Kind == wasm::WASM_EXTERNAL_TABLE) {
     IO.mapRequired("Table", Import.TableImport);
-  } else if (Import.Kind == wasm::WASM_EXTERNAL_MEMORY ) {
+  } else if (Import.Kind == wasm::WASM_EXTERNAL_MEMORY) {
     IO.mapRequired("Memory", Import.Memory);
   } else {
     llvm_unreachable("unhandled import type");
@@ -366,7 +394,7 @@ void MappingTraits<WasmYAML::DataSegment>::mapping(
 void MappingTraits<WasmYAML::InitFunction>::mapping(
     IO &IO, WasmYAML::InitFunction &Init) {
   IO.mapRequired("Priority", Init.Priority);
-  IO.mapRequired("FunctionIndex", Init.FunctionIndex);
+  IO.mapRequired("Symbol", Init.Symbol);
 }
 
 void ScalarEnumerationTraits<WasmYAML::ComdatKind>::enumeration(
@@ -383,38 +411,76 @@ void MappingTraits<WasmYAML::ComdatEntry>::mapping(
   IO.mapRequired("Index", ComdatEntry.Index);
 }
 
-void MappingTraits<WasmYAML::Comdat>::mapping(
-    IO &IO, WasmYAML::Comdat &Comdat) {
+void MappingTraits<WasmYAML::Comdat>::mapping(IO &IO,
+                                              WasmYAML::Comdat &Comdat) {
   IO.mapRequired("Name", Comdat.Name);
   IO.mapRequired("Entries", Comdat.Entries);
 }
 
 void MappingTraits<WasmYAML::SymbolInfo>::mapping(IO &IO,
                                                   WasmYAML::SymbolInfo &Info) {
+  IO.mapRequired("Index", Info.Index);
+  IO.mapRequired("Kind", Info.Kind);
   IO.mapRequired("Name", Info.Name);
   IO.mapRequired("Flags", Info.Flags);
+  if (Info.Kind == wasm::WASM_SYMBOL_TYPE_FUNCTION) {
+    IO.mapRequired("Function", Info.ElementIndex);
+  } else if (Info.Kind == wasm::WASM_SYMBOL_TYPE_GLOBAL) {
+    IO.mapRequired("Global", Info.ElementIndex);
+  } else if (Info.Kind == wasm::WASM_SYMBOL_TYPE_EVENT) {
+    IO.mapRequired("Event", Info.ElementIndex);
+  } else if (Info.Kind == wasm::WASM_SYMBOL_TYPE_DATA) {
+    if ((Info.Flags & wasm::WASM_SYMBOL_UNDEFINED) == 0) {
+      IO.mapRequired("Segment", Info.DataRef.Segment);
+      IO.mapOptional("Offset", Info.DataRef.Offset, 0u);
+      IO.mapRequired("Size", Info.DataRef.Size);
+    }
+  } else if (Info.Kind == wasm::WASM_SYMBOL_TYPE_SECTION) {
+    IO.mapRequired("Section", Info.ElementIndex);
+  } else {
+    llvm_unreachable("unsupported symbol kind");
+  }
+}
+
+void MappingTraits<WasmYAML::Event>::mapping(IO &IO, WasmYAML::Event &Event) {
+  IO.mapRequired("Index", Event.Index);
+  IO.mapRequired("Attribute", Event.Attribute);
+  IO.mapRequired("SigIndex", Event.SigIndex);
 }
 
 void ScalarBitSetTraits<WasmYAML::LimitFlags>::bitset(
     IO &IO, WasmYAML::LimitFlags &Value) {
 #define BCase(X) IO.bitSetCase(Value, #X, wasm::WASM_LIMITS_FLAG_##X)
   BCase(HAS_MAX);
+  BCase(IS_SHARED);
 #undef BCase
 }
 
 void ScalarBitSetTraits<WasmYAML::SegmentFlags>::bitset(
-    IO &IO, WasmYAML::SegmentFlags &Value) {
-}
+    IO &IO, WasmYAML::SegmentFlags &Value) {}
 
 void ScalarBitSetTraits<WasmYAML::SymbolFlags>::bitset(
     IO &IO, WasmYAML::SymbolFlags &Value) {
-#define BCaseMask(M, X) IO.maskedBitSetCase(Value, #X, wasm::WASM_SYMBOL_##X, wasm::WASM_SYMBOL_##M)
-  //BCaseMask(BINDING_MASK, BINDING_GLOBAL);
+#define BCaseMask(M, X)                                                        \
+  IO.maskedBitSetCase(Value, #X, wasm::WASM_SYMBOL_##X, wasm::WASM_SYMBOL_##M)
+  // BCaseMask(BINDING_MASK, BINDING_GLOBAL);
   BCaseMask(BINDING_MASK, BINDING_WEAK);
   BCaseMask(BINDING_MASK, BINDING_LOCAL);
-  //BCaseMask(VISIBILITY_MASK, VISIBILITY_DEFAULT);
+  // BCaseMask(VISIBILITY_MASK, VISIBILITY_DEFAULT);
   BCaseMask(VISIBILITY_MASK, VISIBILITY_HIDDEN);
+  BCaseMask(UNDEFINED, UNDEFINED);
 #undef BCaseMask
+}
+
+void ScalarEnumerationTraits<WasmYAML::SymbolKind>::enumeration(
+    IO &IO, WasmYAML::SymbolKind &Kind) {
+#define ECase(X) IO.enumCase(Kind, #X, wasm::WASM_SYMBOL_TYPE_##X);
+  ECase(FUNCTION);
+  ECase(DATA);
+  ECase(GLOBAL);
+  ECase(SECTION);
+  ECase(EVENT);
+#undef ECase
 }
 
 void ScalarEnumerationTraits<WasmYAML::ValueType>::enumeration(
@@ -424,6 +490,7 @@ void ScalarEnumerationTraits<WasmYAML::ValueType>::enumeration(
   ECase(I64);
   ECase(F32);
   ECase(F64);
+  ECase(V128);
   ECase(ANYFUNC);
   ECase(FUNC);
   ECase(NORESULT);
@@ -437,6 +504,7 @@ void ScalarEnumerationTraits<WasmYAML::ExportKind>::enumeration(
   ECase(TABLE);
   ECase(MEMORY);
   ECase(GLOBAL);
+  ECase(EVENT);
 #undef ECase
 }
 

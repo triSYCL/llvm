@@ -15,6 +15,7 @@ add_llvm_library(LLVMipo
   GlobalDCE.cpp
   GlobalOpt.cpp
   GlobalSplit.cpp
+  HotColdSplitting.cpp
   IPConstantPropagation.cpp
   IPO.cpp
   InferFunctionAttrs.cpp
@@ -28,6 +29,7 @@ add_llvm_library(LLVMipo
   PassManagerBuilder.cpp
   PruneEH.cpp
   SampleProfile.cpp
+  SCCP.cpp
   StripDeadPrototypes.cpp
   StripSymbols.cpp
   SyntheticCountsPropagation.cpp

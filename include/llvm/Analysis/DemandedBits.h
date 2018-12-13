@@ -44,6 +44,14 @@ public:
     F(F), AC(AC), DT(DT) {}
 
   /// Return the bits demanded from instruction I.
+  ///
+  /// For vector instructions individual vector elements are not distinguished:
+  /// A bit is demanded if it is demanded for any of the vector elements. The
+  /// size of the return value corresponds to the type size in bits of the
+  /// scalar type.
+  ///
+  /// Instructions that do not have integer or vector of integer type are
+  /// accepted, but will always produce a mask with all bits set.
   APInt getDemandedBits(Instruction *I);
 
   /// Return true if, during analysis, I could not be reached.
@@ -96,15 +104,15 @@ class DemandedBitsAnalysis : public AnalysisInfoMixin<DemandedBitsAnalysis> {
   static AnalysisKey Key;
 
 public:
-  /// \brief Provide the result type for this analysis pass.
+  /// Provide the result type for this analysis pass.
   using Result = DemandedBits;
 
-  /// \brief Run the analysis pass over a function and produce demanded bits
+  /// Run the analysis pass over a function and produce demanded bits
   /// information.
   DemandedBits run(Function &F, FunctionAnalysisManager &AM);
 };
 
-/// \brief Printer pass for DemandedBits
+/// Printer pass for DemandedBits
 class DemandedBitsPrinterPass : public PassInfoMixin<DemandedBitsPrinterPass> {
   raw_ostream &OS;
 

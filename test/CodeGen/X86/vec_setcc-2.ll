@@ -5,26 +5,49 @@
 ; For a setult against a constant, turn it into a setule and lower via psubusw.
 
 define void @loop_no_const_reload(<2 x i64>*  %in, <2 x i64>* %out, i32 %n) {
-; CHECK-LABEL: loop_no_const_reload:
-; CHECK:       ## %bb.0: ## %entry
-; CHECK-NEXT:    testl %edx, %edx
-; CHECK-NEXT:    je LBB0_3
-; CHECK-NEXT:  ## %bb.1: ## %for.body.preheader
-; CHECK-NEXT:    xorl %eax, %eax
-; CHECK-NEXT:    movdqa {{.*#+}} xmm0 = [25,25,25,25,25,25,25,25]
-; CHECK-NEXT:    pxor %xmm1, %xmm1
-; CHECK-NEXT:    .p2align 4, 0x90
-; CHECK-NEXT:  LBB0_2: ## %for.body
-; CHECK-NEXT:    ## =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    movdqa (%rdi,%rax), %xmm2
-; CHECK-NEXT:    psubusw %xmm0, %xmm2
-; CHECK-NEXT:    pcmpeqw %xmm1, %xmm2
-; CHECK-NEXT:    movdqa %xmm2, (%rsi,%rax)
-; CHECK-NEXT:    addq $16, %rax
-; CHECK-NEXT:    decl %edx
-; CHECK-NEXT:    jne LBB0_2
-; CHECK-NEXT:  LBB0_3: ## %for.end
-; CHECK-NEXT:    retq
+; SSE2-LABEL: loop_no_const_reload:
+; SSE2:       ## %bb.0: ## %entry
+; SSE2-NEXT:    testl %edx, %edx
+; SSE2-NEXT:    je LBB0_3
+; SSE2-NEXT:  ## %bb.1: ## %for.body.preheader
+; SSE2-NEXT:    xorl %eax, %eax
+; SSE2-NEXT:    movdqa {{.*#+}} xmm0 = [25,25,25,25,25,25,25,25]
+; SSE2-NEXT:    pxor %xmm1, %xmm1
+; SSE2-NEXT:    .p2align 4, 0x90
+; SSE2-NEXT:  LBB0_2: ## %for.body
+; SSE2-NEXT:    ## =>This Inner Loop Header: Depth=1
+; SSE2-NEXT:    movdqa (%rdi,%rax), %xmm2
+; SSE2-NEXT:    psubusw %xmm0, %xmm2
+; SSE2-NEXT:    pcmpeqw %xmm1, %xmm2
+; SSE2-NEXT:    movdqa %xmm2, (%rsi,%rax)
+; SSE2-NEXT:    addq $16, %rax
+; SSE2-NEXT:    decl %edx
+; SSE2-NEXT:    jne LBB0_2
+; SSE2-NEXT:  LBB0_3: ## %for.end
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: loop_no_const_reload:
+; SSE41:       ## %bb.0: ## %entry
+; SSE41-NEXT:    testl %edx, %edx
+; SSE41-NEXT:    je LBB0_3
+; SSE41-NEXT:  ## %bb.1: ## %for.body.preheader
+; SSE41-NEXT:    xorl %eax, %eax
+; SSE41-NEXT:    movdqa {{.*#+}} xmm0 = [26,26,26,26,26,26,26,26]
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm1
+; SSE41-NEXT:    .p2align 4, 0x90
+; SSE41-NEXT:  LBB0_2: ## %for.body
+; SSE41-NEXT:    ## =>This Inner Loop Header: Depth=1
+; SSE41-NEXT:    movdqa (%rdi,%rax), %xmm2
+; SSE41-NEXT:    movdqa %xmm2, %xmm3
+; SSE41-NEXT:    pmaxuw %xmm0, %xmm3
+; SSE41-NEXT:    pcmpeqw %xmm2, %xmm3
+; SSE41-NEXT:    pxor %xmm1, %xmm3
+; SSE41-NEXT:    movdqa %xmm3, (%rsi,%rax)
+; SSE41-NEXT:    addq $16, %rax
+; SSE41-NEXT:    decl %edx
+; SSE41-NEXT:    jne LBB0_2
+; SSE41-NEXT:  LBB0_3: ## %for.end
+; SSE41-NEXT:    retq
 entry:
   %cmp9 = icmp eq i32 %n, 0
   br i1 %cmp9, label %for.end, label %for.body
@@ -51,27 +74,50 @@ for.end:                                          ; preds = %for.body, %entry
 ; Be careful if decrementing the constant would undeflow.
 
 define void @loop_const_folding_underflow(<2 x i64>*  %in, <2 x i64>* %out, i32 %n) {
-; CHECK-LABEL: loop_const_folding_underflow:
-; CHECK:       ## %bb.0: ## %entry
-; CHECK-NEXT:    testl %edx, %edx
-; CHECK-NEXT:    je LBB1_3
-; CHECK-NEXT:  ## %bb.1: ## %for.body.preheader
-; CHECK-NEXT:    xorl %eax, %eax
-; CHECK-NEXT:    movdqa {{.*#+}} xmm0 = [32768,32768,32768,32768,32768,32768,32768,32768]
-; CHECK-NEXT:    movdqa {{.*#+}} xmm1 = [32768,32794,32794,32794,32794,32794,32794,32794]
-; CHECK-NEXT:    .p2align 4, 0x90
-; CHECK-NEXT:  LBB1_2: ## %for.body
-; CHECK-NEXT:    ## =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    movdqa (%rdi,%rax), %xmm2
-; CHECK-NEXT:    pxor %xmm0, %xmm2
-; CHECK-NEXT:    movdqa %xmm1, %xmm3
-; CHECK-NEXT:    pcmpgtw %xmm2, %xmm3
-; CHECK-NEXT:    movdqa %xmm3, (%rsi,%rax)
-; CHECK-NEXT:    addq $16, %rax
-; CHECK-NEXT:    decl %edx
-; CHECK-NEXT:    jne LBB1_2
-; CHECK-NEXT:  LBB1_3: ## %for.end
-; CHECK-NEXT:    retq
+; SSE2-LABEL: loop_const_folding_underflow:
+; SSE2:       ## %bb.0: ## %entry
+; SSE2-NEXT:    testl %edx, %edx
+; SSE2-NEXT:    je LBB1_3
+; SSE2-NEXT:  ## %bb.1: ## %for.body.preheader
+; SSE2-NEXT:    xorl %eax, %eax
+; SSE2-NEXT:    movdqa {{.*#+}} xmm0 = [32768,32768,32768,32768,32768,32768,32768,32768]
+; SSE2-NEXT:    movdqa {{.*#+}} xmm1 = [32768,32794,32794,32794,32794,32794,32794,32794]
+; SSE2-NEXT:    .p2align 4, 0x90
+; SSE2-NEXT:  LBB1_2: ## %for.body
+; SSE2-NEXT:    ## =>This Inner Loop Header: Depth=1
+; SSE2-NEXT:    movdqa (%rdi,%rax), %xmm2
+; SSE2-NEXT:    pxor %xmm0, %xmm2
+; SSE2-NEXT:    movdqa %xmm1, %xmm3
+; SSE2-NEXT:    pcmpgtw %xmm2, %xmm3
+; SSE2-NEXT:    movdqa %xmm3, (%rsi,%rax)
+; SSE2-NEXT:    addq $16, %rax
+; SSE2-NEXT:    decl %edx
+; SSE2-NEXT:    jne LBB1_2
+; SSE2-NEXT:  LBB1_3: ## %for.end
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: loop_const_folding_underflow:
+; SSE41:       ## %bb.0: ## %entry
+; SSE41-NEXT:    testl %edx, %edx
+; SSE41-NEXT:    je LBB1_3
+; SSE41-NEXT:  ## %bb.1: ## %for.body.preheader
+; SSE41-NEXT:    xorl %eax, %eax
+; SSE41-NEXT:    movdqa {{.*#+}} xmm0 = [0,26,26,26,26,26,26,26]
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm1
+; SSE41-NEXT:    .p2align 4, 0x90
+; SSE41-NEXT:  LBB1_2: ## %for.body
+; SSE41-NEXT:    ## =>This Inner Loop Header: Depth=1
+; SSE41-NEXT:    movdqa (%rdi,%rax), %xmm2
+; SSE41-NEXT:    movdqa %xmm2, %xmm3
+; SSE41-NEXT:    pmaxuw %xmm0, %xmm3
+; SSE41-NEXT:    pcmpeqw %xmm2, %xmm3
+; SSE41-NEXT:    pxor %xmm1, %xmm3
+; SSE41-NEXT:    movdqa %xmm3, (%rsi,%rax)
+; SSE41-NEXT:    addq $16, %rax
+; SSE41-NEXT:    decl %edx
+; SSE41-NEXT:    jne LBB1_2
+; SSE41-NEXT:  LBB1_3: ## %for.end
+; SSE41-NEXT:    retq
 entry:
   %cmp9 = icmp eq i32 %n, 0
   br i1 %cmp9, label %for.end, label %for.body
@@ -100,9 +146,11 @@ for.end:                                          ; preds = %for.body, %entry
 define <16 x i8> @test_ult_byte(<16 x i8> %a) {
 ; CHECK-LABEL: test_ult_byte:
 ; CHECK:       ## %bb.0: ## %entry
-; CHECK-NEXT:    psubusb {{.*}}(%rip), %xmm0
-; CHECK-NEXT:    pxor %xmm1, %xmm1
+; CHECK-NEXT:    movdqa {{.*#+}} xmm1 = [11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11]
+; CHECK-NEXT:    pmaxub %xmm0, %xmm1
 ; CHECK-NEXT:    pcmpeqb %xmm1, %xmm0
+; CHECK-NEXT:    pcmpeqd %xmm1, %xmm1
+; CHECK-NEXT:    pxor %xmm1, %xmm0
 ; CHECK-NEXT:    retq
 entry:
   %icmp = icmp ult <16 x i8> %a, <i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11, i8 11>
@@ -114,16 +162,403 @@ entry:
 ; register operands.
 
 define <8 x i16> @test_ult_register(<8 x i16> %a, <8 x i16> %b) {
-; CHECK-LABEL: test_ult_register:
-; CHECK:       ## %bb.0: ## %entry
-; CHECK-NEXT:    movdqa {{.*#+}} xmm2 = [32768,32768,32768,32768,32768,32768,32768,32768]
-; CHECK-NEXT:    pxor %xmm2, %xmm0
-; CHECK-NEXT:    pxor %xmm1, %xmm2
-; CHECK-NEXT:    pcmpgtw %xmm0, %xmm2
-; CHECK-NEXT:    movdqa %xmm2, %xmm0
-; CHECK-NEXT:    retq
+; SSE2-LABEL: test_ult_register:
+; SSE2:       ## %bb.0: ## %entry
+; SSE2-NEXT:    movdqa {{.*#+}} xmm2 = [32768,32768,32768,32768,32768,32768,32768,32768]
+; SSE2-NEXT:    pxor %xmm2, %xmm0
+; SSE2-NEXT:    pxor %xmm1, %xmm2
+; SSE2-NEXT:    pcmpgtw %xmm0, %xmm2
+; SSE2-NEXT:    movdqa %xmm2, %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: test_ult_register:
+; SSE41:       ## %bb.0: ## %entry
+; SSE41-NEXT:    pmaxuw %xmm0, %xmm1
+; SSE41-NEXT:    pcmpeqw %xmm1, %xmm0
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm1
+; SSE41-NEXT:    pxor %xmm1, %xmm0
+; SSE41-NEXT:    retq
 entry:
   %icmp = icmp ult <8 x i16> %a, %b
   %sext = sext <8 x i1> %icmp to <8 x i16>
   ret <8 x i16> %sext
 }
+
+define <16 x i1> @ugt_v16i8_splat(<16 x i8> %x) {
+; CHECK-LABEL: ugt_v16i8_splat:
+; CHECK:       ## %bb.0:
+; CHECK-NEXT:    movdqa {{.*#+}} xmm1 = [42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42]
+; CHECK-NEXT:    pminub %xmm0, %xmm1
+; CHECK-NEXT:    pcmpeqb %xmm1, %xmm0
+; CHECK-NEXT:    pcmpeqd %xmm1, %xmm1
+; CHECK-NEXT:    pxor %xmm1, %xmm0
+; CHECK-NEXT:    retq
+  %cmp = icmp ugt <16 x i8> %x, <i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42>
+  ret <16 x i1> %cmp
+}
+
+define <8 x i1> @ugt_v8i16_splat(<8 x i16> %x) {
+; SSE2-LABEL: ugt_v8i16_splat:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    pcmpgtw {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: ugt_v8i16_splat:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    movdqa {{.*#+}} xmm1 = [242,242,242,242,242,242,242,242]
+; SSE41-NEXT:    pminuw %xmm0, %xmm1
+; SSE41-NEXT:    pcmpeqw %xmm1, %xmm0
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm1
+; SSE41-NEXT:    pxor %xmm1, %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp ugt <8 x i16> %x, <i16 242, i16 242, i16 242, i16 242, i16 242, i16 242, i16 242, i16 242>
+  ret <8 x i1> %cmp
+}
+
+define <4 x i1> @ugt_v4i32_splat(<4 x i32> %x) {
+; SSE2-LABEL: ugt_v4i32_splat:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    pcmpgtd {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: ugt_v4i32_splat:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    movdqa {{.*#+}} xmm1 = [4294967254,4294967254,4294967254,4294967254]
+; SSE41-NEXT:    pminud %xmm0, %xmm1
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm0
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm1
+; SSE41-NEXT:    pxor %xmm1, %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp ugt <4 x i32> %x, <i32 -42, i32 -42, i32 -42, i32 -42>
+  ret <4 x i1> %cmp
+}
+
+define <2 x i1> @ugt_v2i64_splat(<2 x i64> %x) {
+; SSE2-LABEL: ugt_v2i64_splat:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    movdqa {{.*#+}} xmm1 = [9223372039002259898,9223372039002259898]
+; SSE2-NEXT:    movdqa %xmm0, %xmm2
+; SSE2-NEXT:    pcmpgtd %xmm1, %xmm2
+; SSE2-NEXT:    pshufd {{.*#+}} xmm3 = xmm2[0,0,2,2]
+; SSE2-NEXT:    pcmpeqd %xmm1, %xmm0
+; SSE2-NEXT:    pshufd {{.*#+}} xmm1 = xmm0[1,1,3,3]
+; SSE2-NEXT:    pand %xmm3, %xmm1
+; SSE2-NEXT:    pshufd {{.*#+}} xmm0 = xmm2[1,1,3,3]
+; SSE2-NEXT:    por %xmm1, %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: ugt_v2i64_splat:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE41-NEXT:    pcmpgtq {{.*}}(%rip), %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp ugt <2 x i64> %x, <i64 442, i64 442>
+  ret <2 x i1> %cmp
+}
+
+define <16 x i1> @uge_v16i8_splat(<16 x i8> %x) {
+; CHECK-LABEL: uge_v16i8_splat:
+; CHECK:       ## %bb.0:
+; CHECK-NEXT:    movdqa {{.*#+}} xmm1 = [42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42]
+; CHECK-NEXT:    pmaxub %xmm0, %xmm1
+; CHECK-NEXT:    pcmpeqb %xmm1, %xmm0
+; CHECK-NEXT:    retq
+  %cmp = icmp uge <16 x i8> %x, <i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42>
+  ret <16 x i1> %cmp
+}
+
+define <8 x i1> @uge_v8i16_splat(<8 x i16> %x) {
+; SSE2-LABEL: uge_v8i16_splat:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    movdqa {{.*#+}} xmm1 = [242,242,242,242,242,242,242,242]
+; SSE2-NEXT:    psubusw %xmm0, %xmm1
+; SSE2-NEXT:    pxor %xmm0, %xmm0
+; SSE2-NEXT:    pcmpeqw %xmm1, %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: uge_v8i16_splat:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    movdqa {{.*#+}} xmm1 = [242,242,242,242,242,242,242,242]
+; SSE41-NEXT:    pmaxuw %xmm0, %xmm1
+; SSE41-NEXT:    pcmpeqw %xmm1, %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp uge <8 x i16> %x, <i16 242, i16 242, i16 242, i16 242, i16 242, i16 242, i16 242, i16 242>
+  ret <8 x i1> %cmp
+}
+
+define <4 x i1> @uge_v4i32_splat(<4 x i32> %x) {
+; SSE2-LABEL: uge_v4i32_splat:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    movdqa {{.*#+}} xmm1 = [2147483606,2147483606,2147483606,2147483606]
+; SSE2-NEXT:    pcmpgtd %xmm0, %xmm1
+; SSE2-NEXT:    pcmpeqd %xmm0, %xmm0
+; SSE2-NEXT:    pxor %xmm1, %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: uge_v4i32_splat:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    movdqa {{.*#+}} xmm1 = [4294967254,4294967254,4294967254,4294967254]
+; SSE41-NEXT:    pmaxud %xmm0, %xmm1
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp uge <4 x i32> %x, <i32 -42, i32 -42, i32 -42, i32 -42>
+  ret <4 x i1> %cmp
+}
+
+define <2 x i1> @uge_v2i64_splat(<2 x i64> %x) {
+; SSE2-LABEL: uge_v2i64_splat:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    movdqa {{.*#+}} xmm1 = [9223372039002259898,9223372039002259898]
+; SSE2-NEXT:    movdqa %xmm1, %xmm2
+; SSE2-NEXT:    pcmpgtd %xmm0, %xmm2
+; SSE2-NEXT:    pshufd {{.*#+}} xmm3 = xmm2[0,0,2,2]
+; SSE2-NEXT:    pcmpeqd %xmm1, %xmm0
+; SSE2-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[1,1,3,3]
+; SSE2-NEXT:    pand %xmm3, %xmm0
+; SSE2-NEXT:    pshufd {{.*#+}} xmm1 = xmm2[1,1,3,3]
+; SSE2-NEXT:    por %xmm0, %xmm1
+; SSE2-NEXT:    pcmpeqd %xmm0, %xmm0
+; SSE2-NEXT:    pxor %xmm1, %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: uge_v2i64_splat:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE41-NEXT:    movdqa {{.*#+}} xmm1 = [9223372036854776250,9223372036854776250]
+; SSE41-NEXT:    pcmpgtq %xmm0, %xmm1
+; SSE41-NEXT:    pcmpeqd %xmm0, %xmm0
+; SSE41-NEXT:    pxor %xmm1, %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp uge <2 x i64> %x, <i64 442, i64 442>
+  ret <2 x i1> %cmp
+}
+
+define <16 x i1> @ult_v16i8_splat(<16 x i8> %x) {
+; CHECK-LABEL: ult_v16i8_splat:
+; CHECK:       ## %bb.0:
+; CHECK-NEXT:    movdqa {{.*#+}} xmm1 = [42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42]
+; CHECK-NEXT:    pmaxub %xmm0, %xmm1
+; CHECK-NEXT:    pcmpeqb %xmm1, %xmm0
+; CHECK-NEXT:    pcmpeqd %xmm1, %xmm1
+; CHECK-NEXT:    pxor %xmm1, %xmm0
+; CHECK-NEXT:    retq
+  %cmp = icmp ult <16 x i8> %x, <i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42>
+  ret <16 x i1> %cmp
+}
+
+define <8 x i1> @ult_v8i16_splat(<8 x i16> %x) {
+; SSE2-LABEL: ult_v8i16_splat:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    psubusw {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    pxor %xmm1, %xmm1
+; SSE2-NEXT:    pcmpeqw %xmm1, %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: ult_v8i16_splat:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    movdqa {{.*#+}} xmm1 = [242,242,242,242,242,242,242,242]
+; SSE41-NEXT:    pmaxuw %xmm0, %xmm1
+; SSE41-NEXT:    pcmpeqw %xmm1, %xmm0
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm1
+; SSE41-NEXT:    pxor %xmm1, %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp ult <8 x i16> %x, <i16 242, i16 242, i16 242, i16 242, i16 242, i16 242, i16 242, i16 242>
+  ret <8 x i1> %cmp
+}
+
+define <4 x i1> @ult_v4i32_splat(<4 x i32> %x) {
+; SSE2-LABEL: ult_v4i32_splat:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    movdqa {{.*#+}} xmm1 = [2147483606,2147483606,2147483606,2147483606]
+; SSE2-NEXT:    pcmpgtd %xmm0, %xmm1
+; SSE2-NEXT:    movdqa %xmm1, %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: ult_v4i32_splat:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    movdqa {{.*#+}} xmm1 = [4294967254,4294967254,4294967254,4294967254]
+; SSE41-NEXT:    pmaxud %xmm0, %xmm1
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm0
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm1
+; SSE41-NEXT:    pxor %xmm1, %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp ult <4 x i32> %x, <i32 -42, i32 -42, i32 -42, i32 -42>
+  ret <4 x i1> %cmp
+}
+
+define <2 x i1> @ult_v2i64_splat(<2 x i64> %x) {
+; SSE2-LABEL: ult_v2i64_splat:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    movdqa {{.*#+}} xmm1 = [9223372039002259898,9223372039002259898]
+; SSE2-NEXT:    movdqa %xmm1, %xmm2
+; SSE2-NEXT:    pcmpgtd %xmm0, %xmm2
+; SSE2-NEXT:    pshufd {{.*#+}} xmm3 = xmm2[0,0,2,2]
+; SSE2-NEXT:    pcmpeqd %xmm1, %xmm0
+; SSE2-NEXT:    pshufd {{.*#+}} xmm1 = xmm0[1,1,3,3]
+; SSE2-NEXT:    pand %xmm3, %xmm1
+; SSE2-NEXT:    pshufd {{.*#+}} xmm0 = xmm2[1,1,3,3]
+; SSE2-NEXT:    por %xmm1, %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: ult_v2i64_splat:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE41-NEXT:    movdqa {{.*#+}} xmm1 = [9223372036854776250,9223372036854776250]
+; SSE41-NEXT:    pcmpgtq %xmm0, %xmm1
+; SSE41-NEXT:    movdqa %xmm1, %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp ult <2 x i64> %x, <i64 442, i64 442>
+  ret <2 x i1> %cmp
+}
+
+define <16 x i1> @ule_v16i8_splat(<16 x i8> %x) {
+; CHECK-LABEL: ule_v16i8_splat:
+; CHECK:       ## %bb.0:
+; CHECK-NEXT:    movdqa {{.*#+}} xmm1 = [42,42,42,42,42,42,42,42,42,42,42,42,42,42,42,42]
+; CHECK-NEXT:    pminub %xmm0, %xmm1
+; CHECK-NEXT:    pcmpeqb %xmm1, %xmm0
+; CHECK-NEXT:    retq
+  %cmp = icmp ule <16 x i8> %x, <i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42, i8 42>
+  ret <16 x i1> %cmp
+}
+
+define <8 x i1> @ule_v8i16_splat(<8 x i16> %x) {
+; SSE2-LABEL: ule_v8i16_splat:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    psubusw {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    pxor %xmm1, %xmm1
+; SSE2-NEXT:    pcmpeqw %xmm1, %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: ule_v8i16_splat:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    movdqa {{.*#+}} xmm1 = [242,242,242,242,242,242,242,242]
+; SSE41-NEXT:    pminuw %xmm0, %xmm1
+; SSE41-NEXT:    pcmpeqw %xmm1, %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp ule <8 x i16> %x, <i16 242, i16 242, i16 242, i16 242, i16 242, i16 242, i16 242, i16 242>
+  ret <8 x i1> %cmp
+}
+
+define <4 x i1> @ule_v4i32_splat(<4 x i32> %x) {
+; SSE2-LABEL: ule_v4i32_splat:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    pcmpgtd {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    pcmpeqd %xmm1, %xmm1
+; SSE2-NEXT:    pxor %xmm1, %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: ule_v4i32_splat:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    movdqa {{.*#+}} xmm1 = [4294967254,4294967254,4294967254,4294967254]
+; SSE41-NEXT:    pminud %xmm0, %xmm1
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp ule <4 x i32> %x, <i32 -42, i32 -42, i32 -42, i32 -42>
+  ret <4 x i1> %cmp
+}
+
+define <2 x i1> @ule_v2i64_splat(<2 x i64> %x) {
+; SSE2-LABEL: ule_v2i64_splat:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    movdqa {{.*#+}} xmm1 = [9223372039002259898,9223372039002259898]
+; SSE2-NEXT:    movdqa %xmm0, %xmm2
+; SSE2-NEXT:    pcmpgtd %xmm1, %xmm2
+; SSE2-NEXT:    pshufd {{.*#+}} xmm3 = xmm2[0,0,2,2]
+; SSE2-NEXT:    pcmpeqd %xmm1, %xmm0
+; SSE2-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[1,1,3,3]
+; SSE2-NEXT:    pand %xmm3, %xmm0
+; SSE2-NEXT:    pshufd {{.*#+}} xmm1 = xmm2[1,1,3,3]
+; SSE2-NEXT:    por %xmm0, %xmm1
+; SSE2-NEXT:    pcmpeqd %xmm0, %xmm0
+; SSE2-NEXT:    pxor %xmm1, %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: ule_v2i64_splat:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE41-NEXT:    pcmpgtq {{.*}}(%rip), %xmm0
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm1
+; SSE41-NEXT:    pxor %xmm1, %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp ule <2 x i64> %x, <i64 442, i64 442>
+  ret <2 x i1> %cmp
+}
+
+define <4 x i1> @ugt_v4i32_nonsplat(<4 x i32> %x) {
+; SSE2-LABEL: ugt_v4i32_nonsplat:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    pcmpgtd {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: ugt_v4i32_nonsplat:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    movdqa {{.*#+}} xmm1 = [4294967253,4294967254,4294967255,4294967256]
+; SSE41-NEXT:    pminud %xmm0, %xmm1
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm0
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm1
+; SSE41-NEXT:    pxor %xmm1, %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp ugt <4 x i32> %x, <i32 -43, i32 -42, i32 -41, i32 -40>
+  ret <4 x i1> %cmp
+}
+
+define <4 x i1> @ugt_v4i32_splat_commute(<4 x i32> %x) {
+; SSE2-LABEL: ugt_v4i32_splat_commute:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    pxor {{.*}}(%rip), %xmm0
+; SSE2-NEXT:    movdqa {{.*#+}} xmm1 = [2147483652,2147483652,2147483652,2147483652]
+; SSE2-NEXT:    pcmpgtd %xmm0, %xmm1
+; SSE2-NEXT:    movdqa %xmm1, %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: ugt_v4i32_splat_commute:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    movdqa {{.*#+}} xmm1 = [4,4,4,4]
+; SSE41-NEXT:    pmaxud %xmm0, %xmm1
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm0
+; SSE41-NEXT:    pcmpeqd %xmm1, %xmm1
+; SSE41-NEXT:    pxor %xmm1, %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp ugt <4 x i32> <i32 4, i32 4, i32 4, i32 4>, %x
+  ret <4 x i1> %cmp
+}
+
+define <8 x i16> @PR39859(<8 x i16> %x, <8 x i16> %y) {
+; SSE2-LABEL: PR39859:
+; SSE2:       ## %bb.0:
+; SSE2-NEXT:    movdqa {{.*#+}} xmm2 = [32768,32768,32768,32768,32768,32768,32768,32768]
+; SSE2-NEXT:    pxor %xmm0, %xmm2
+; SSE2-NEXT:    pcmpgtw {{.*}}(%rip), %xmm2
+; SSE2-NEXT:    pand %xmm2, %xmm1
+; SSE2-NEXT:    pandn %xmm0, %xmm2
+; SSE2-NEXT:    por %xmm1, %xmm2
+; SSE2-NEXT:    movdqa %xmm2, %xmm0
+; SSE2-NEXT:    retq
+;
+; SSE41-LABEL: PR39859:
+; SSE41:       ## %bb.0:
+; SSE41-NEXT:    movdqa %xmm0, %xmm2
+; SSE41-NEXT:    movdqa {{.*#+}} xmm3 = [42,42,42,42,42,42,42,42]
+; SSE41-NEXT:    pminuw %xmm0, %xmm3
+; SSE41-NEXT:    pcmpeqw %xmm0, %xmm3
+; SSE41-NEXT:    pcmpeqd %xmm0, %xmm0
+; SSE41-NEXT:    pxor %xmm3, %xmm0
+; SSE41-NEXT:    pblendvb %xmm0, %xmm1, %xmm2
+; SSE41-NEXT:    movdqa %xmm2, %xmm0
+; SSE41-NEXT:    retq
+  %cmp = icmp ugt <8 x i16> %x, <i16 42, i16 42, i16 42, i16 42, i16 42, i16 42, i16 42, i16 42>
+  %sel = select <8 x i1> %cmp, <8 x i16> %y, <8 x i16> %x
+  ret <8 x i16> %sel
+}
+

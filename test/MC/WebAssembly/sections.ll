@@ -1,6 +1,6 @@
 ; RUN: llc -filetype=obj %s -o - | llvm-readobj -s | FileCheck %s
 
-target triple = "wasm32-unknown-unknown-wasm"
+target triple = "wasm32-unknown-unknown"
 
 ; external function
 declare i32 @a()
@@ -27,12 +27,6 @@ entry:
 ; CHECK:  }
 ; CHECK:  Section {
 ; CHECK:    Type: FUNCTION (0x3)
-; CHECK:  }
-; CHECK:  Section {
-; CHECK:    Type: GLOBAL (0x6)
-; CHECK:  }
-; CHECK:  Section {
-; CHECK:    Type: EXPORT (0x7)
 ; CHECK:  }
 ; CHECK:  Section {
 ; CHECK:    Type: CODE (0xA)

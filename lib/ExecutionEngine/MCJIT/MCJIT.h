@@ -14,10 +14,10 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/ObjectCache.h"
-#include "llvm/ExecutionEngine/ObjectMemoryBuffer.h"
 #include "llvm/ExecutionEngine/RTDyldMemoryManager.h"
 #include "llvm/ExecutionEngine/RuntimeDyld.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Support/SmallVectorMemoryBuffer.h"
 
 namespace llvm {
 class MCJIT;
@@ -42,6 +42,7 @@ public:
 private:
   MCJIT &ParentEngine;
   std::shared_ptr<LegacyJITSymbolResolver> ClientResolver;
+  void anchor() override;
 };
 
 // About Module states: added->loaded->finalized.
@@ -330,9 +331,9 @@ protected:
   /// the future.
   std::unique_ptr<MemoryBuffer> emitObject(Module *M);
 
-  void NotifyObjectEmitted(const object::ObjectFile& Obj,
-                           const RuntimeDyld::LoadedObjectInfo &L);
-  void NotifyFreeingObject(const object::ObjectFile& Obj);
+  void notifyObjectLoaded(const object::ObjectFile &Obj,
+                          const RuntimeDyld::LoadedObjectInfo &L);
+  void notifyFreeingObject(const object::ObjectFile &Obj);
 
   JITSymbol findExistingSymbol(const std::string &Name);
   Module *findModuleForSymbol(const std::string &Name, bool CheckFunctionsOnly);

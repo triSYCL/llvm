@@ -222,14 +222,18 @@ define float @test_float_args(float %arg1, float %arg2) {
   ; X32:   [[LOAD:%[0-9]+]]:_(s32) = G_LOAD [[FRAME_INDEX]](p0) :: (invariant load 4 from %fixed-stack.1, align 0)
   ; X32:   [[FRAME_INDEX1:%[0-9]+]]:_(p0) = G_FRAME_INDEX %fixed-stack.0
   ; X32:   [[LOAD1:%[0-9]+]]:_(s32) = G_LOAD [[FRAME_INDEX1]](p0) :: (invariant load 4 from %fixed-stack.0, align 0)
-  ; X32:   $fp0 = COPY [[LOAD1]](s32)
+  ; X32:   [[ANYEXT:%[0-9]+]]:_(s80) = G_ANYEXT [[LOAD1]](s32)
+  ; X32:   $fp0 = COPY [[ANYEXT]](s80)
   ; X32:   RET 0, implicit $fp0
   ; X64-LABEL: name: test_float_args
   ; X64: bb.1 (%ir-block.0):
   ; X64:   liveins: $xmm0, $xmm1
-  ; X64:   [[COPY:%[0-9]+]]:_(s32) = COPY $xmm0
-  ; X64:   [[COPY1:%[0-9]+]]:_(s32) = COPY $xmm1
-  ; X64:   $xmm0 = COPY [[COPY1]](s32)
+  ; X64:   [[COPY:%[0-9]+]]:_(s128) = COPY $xmm0
+  ; X64:   [[TRUNC:%[0-9]+]]:_(s32) = G_TRUNC [[COPY]](s128)
+  ; X64:   [[COPY1:%[0-9]+]]:_(s128) = COPY $xmm1
+  ; X64:   [[TRUNC1:%[0-9]+]]:_(s32) = G_TRUNC [[COPY1]](s128)
+  ; X64:   [[ANYEXT:%[0-9]+]]:_(s128) = G_ANYEXT [[TRUNC1]](s32)
+  ; X64:   $xmm0 = COPY [[ANYEXT]](s128)
   ; X64:   RET 0, implicit $xmm0
   ret float %arg2
 }
@@ -241,14 +245,18 @@ define double @test_double_args(double %arg1, double %arg2) {
   ; X32:   [[LOAD:%[0-9]+]]:_(s64) = G_LOAD [[FRAME_INDEX]](p0) :: (invariant load 8 from %fixed-stack.1, align 0)
   ; X32:   [[FRAME_INDEX1:%[0-9]+]]:_(p0) = G_FRAME_INDEX %fixed-stack.0
   ; X32:   [[LOAD1:%[0-9]+]]:_(s64) = G_LOAD [[FRAME_INDEX1]](p0) :: (invariant load 8 from %fixed-stack.0, align 0)
-  ; X32:   $fp0 = COPY [[LOAD1]](s64)
+  ; X32:   [[ANYEXT:%[0-9]+]]:_(s80) = G_ANYEXT [[LOAD1]](s64)
+  ; X32:   $fp0 = COPY [[ANYEXT]](s80)
   ; X32:   RET 0, implicit $fp0
   ; X64-LABEL: name: test_double_args
   ; X64: bb.1 (%ir-block.0):
   ; X64:   liveins: $xmm0, $xmm1
-  ; X64:   [[COPY:%[0-9]+]]:_(s64) = COPY $xmm0
-  ; X64:   [[COPY1:%[0-9]+]]:_(s64) = COPY $xmm1
-  ; X64:   $xmm0 = COPY [[COPY1]](s64)
+  ; X64:   [[COPY:%[0-9]+]]:_(s128) = COPY $xmm0
+  ; X64:   [[TRUNC:%[0-9]+]]:_(s64) = G_TRUNC [[COPY]](s128)
+  ; X64:   [[COPY1:%[0-9]+]]:_(s128) = COPY $xmm1
+  ; X64:   [[TRUNC1:%[0-9]+]]:_(s64) = G_TRUNC [[COPY1]](s128)
+  ; X64:   [[ANYEXT:%[0-9]+]]:_(s128) = G_ANYEXT [[TRUNC1]](s64)
+  ; X64:   $xmm0 = COPY [[ANYEXT]](s128)
   ; X64:   RET 0, implicit $xmm0
   ret double %arg2
 }
@@ -277,7 +285,7 @@ define <8 x i32> @test_v8i32_args(<8 x i32> %arg1) {
   ; X32:   liveins: $xmm0, $xmm1
   ; X32:   [[COPY:%[0-9]+]]:_(<4 x s32>) = COPY $xmm0
   ; X32:   [[COPY1:%[0-9]+]]:_(<4 x s32>) = COPY $xmm1
-  ; X32:   [[MV:%[0-9]+]]:_(<8 x s32>) = G_MERGE_VALUES [[COPY]](<4 x s32>), [[COPY1]](<4 x s32>)
+  ; X32:   [[MV:%[0-9]+]]:_(<8 x s32>) = G_CONCAT_VECTORS [[COPY]](<4 x s32>), [[COPY1]](<4 x s32>)
   ; X32:   [[UV:%[0-9]+]]:_(<4 x s32>), [[UV1:%[0-9]+]]:_(<4 x s32>) = G_UNMERGE_VALUES [[MV]](<8 x s32>)
   ; X32:   $xmm0 = COPY [[UV]](<4 x s32>)
   ; X32:   $xmm1 = COPY [[UV1]](<4 x s32>)
@@ -287,7 +295,7 @@ define <8 x i32> @test_v8i32_args(<8 x i32> %arg1) {
   ; X64:   liveins: $xmm0, $xmm1
   ; X64:   [[COPY:%[0-9]+]]:_(<4 x s32>) = COPY $xmm0
   ; X64:   [[COPY1:%[0-9]+]]:_(<4 x s32>) = COPY $xmm1
-  ; X64:   [[MV:%[0-9]+]]:_(<8 x s32>) = G_MERGE_VALUES [[COPY]](<4 x s32>), [[COPY1]](<4 x s32>)
+  ; X64:   [[MV:%[0-9]+]]:_(<8 x s32>) = G_CONCAT_VECTORS [[COPY]](<4 x s32>), [[COPY1]](<4 x s32>)
   ; X64:   [[UV:%[0-9]+]]:_(<4 x s32>), [[UV1:%[0-9]+]]:_(<4 x s32>) = G_UNMERGE_VALUES [[MV]](<8 x s32>)
   ; X64:   $xmm0 = COPY [[UV]](<4 x s32>)
   ; X64:   $xmm1 = COPY [[UV1]](<4 x s32>)
@@ -486,8 +494,8 @@ define <8 x i32> @test_split_return_callee(<8 x i32> %arg1, <8 x i32> %arg2) {
   ; X32:   [[COPY2:%[0-9]+]]:_(<4 x s32>) = COPY $xmm2
   ; X32:   [[FRAME_INDEX:%[0-9]+]]:_(p0) = G_FRAME_INDEX %fixed-stack.0
   ; X32:   [[LOAD:%[0-9]+]]:_(<4 x s32>) = G_LOAD [[FRAME_INDEX]](p0) :: (invariant load 16 from %fixed-stack.0, align 0)
-  ; X32:   [[MV:%[0-9]+]]:_(<8 x s32>) = G_MERGE_VALUES [[COPY]](<4 x s32>), [[COPY1]](<4 x s32>)
-  ; X32:   [[MV1:%[0-9]+]]:_(<8 x s32>) = G_MERGE_VALUES [[COPY2]](<4 x s32>), [[LOAD]](<4 x s32>)
+  ; X32:   [[MV:%[0-9]+]]:_(<8 x s32>) = G_CONCAT_VECTORS [[COPY]](<4 x s32>), [[COPY1]](<4 x s32>)
+  ; X32:   [[MV1:%[0-9]+]]:_(<8 x s32>) = G_CONCAT_VECTORS [[COPY2]](<4 x s32>), [[LOAD]](<4 x s32>)
   ; X32:   ADJCALLSTACKDOWN32 0, 0, 0, implicit-def $esp, implicit-def $eflags, implicit-def $ssp, implicit $esp, implicit $ssp
   ; X32:   [[UV:%[0-9]+]]:_(<4 x s32>), [[UV1:%[0-9]+]]:_(<4 x s32>) = G_UNMERGE_VALUES [[MV1]](<8 x s32>)
   ; X32:   $xmm0 = COPY [[UV]](<4 x s32>)
@@ -495,7 +503,7 @@ define <8 x i32> @test_split_return_callee(<8 x i32> %arg1, <8 x i32> %arg2) {
   ; X32:   CALLpcrel32 @split_return_callee, csr_32, implicit $esp, implicit $ssp, implicit $xmm0, implicit $xmm1, implicit-def $xmm0, implicit-def $xmm1
   ; X32:   [[COPY3:%[0-9]+]]:_(<4 x s32>) = COPY $xmm0
   ; X32:   [[COPY4:%[0-9]+]]:_(<4 x s32>) = COPY $xmm1
-  ; X32:   [[MV2:%[0-9]+]]:_(<8 x s32>) = G_MERGE_VALUES [[COPY3]](<4 x s32>), [[COPY4]](<4 x s32>)
+  ; X32:   [[MV2:%[0-9]+]]:_(<8 x s32>) = G_CONCAT_VECTORS [[COPY3]](<4 x s32>), [[COPY4]](<4 x s32>)
   ; X32:   ADJCALLSTACKUP32 0, 0, implicit-def $esp, implicit-def $eflags, implicit-def $ssp, implicit $esp, implicit $ssp
   ; X32:   [[ADD:%[0-9]+]]:_(<8 x s32>) = G_ADD [[MV]], [[MV2]]
   ; X32:   [[UV2:%[0-9]+]]:_(<4 x s32>), [[UV3:%[0-9]+]]:_(<4 x s32>) = G_UNMERGE_VALUES [[ADD]](<8 x s32>)
@@ -509,8 +517,8 @@ define <8 x i32> @test_split_return_callee(<8 x i32> %arg1, <8 x i32> %arg2) {
   ; X64:   [[COPY1:%[0-9]+]]:_(<4 x s32>) = COPY $xmm1
   ; X64:   [[COPY2:%[0-9]+]]:_(<4 x s32>) = COPY $xmm2
   ; X64:   [[COPY3:%[0-9]+]]:_(<4 x s32>) = COPY $xmm3
-  ; X64:   [[MV:%[0-9]+]]:_(<8 x s32>) = G_MERGE_VALUES [[COPY]](<4 x s32>), [[COPY1]](<4 x s32>)
-  ; X64:   [[MV1:%[0-9]+]]:_(<8 x s32>) = G_MERGE_VALUES [[COPY2]](<4 x s32>), [[COPY3]](<4 x s32>)
+  ; X64:   [[MV:%[0-9]+]]:_(<8 x s32>) = G_CONCAT_VECTORS [[COPY]](<4 x s32>), [[COPY1]](<4 x s32>)
+  ; X64:   [[MV1:%[0-9]+]]:_(<8 x s32>) = G_CONCAT_VECTORS [[COPY2]](<4 x s32>), [[COPY3]](<4 x s32>)
   ; X64:   ADJCALLSTACKDOWN64 0, 0, 0, implicit-def $rsp, implicit-def $eflags, implicit-def $ssp, implicit $rsp, implicit $ssp
   ; X64:   [[UV:%[0-9]+]]:_(<4 x s32>), [[UV1:%[0-9]+]]:_(<4 x s32>) = G_UNMERGE_VALUES [[MV1]](<8 x s32>)
   ; X64:   $xmm0 = COPY [[UV]](<4 x s32>)
@@ -518,7 +526,7 @@ define <8 x i32> @test_split_return_callee(<8 x i32> %arg1, <8 x i32> %arg2) {
   ; X64:   CALL64pcrel32 @split_return_callee, csr_64, implicit $rsp, implicit $ssp, implicit $xmm0, implicit $xmm1, implicit-def $xmm0, implicit-def $xmm1
   ; X64:   [[COPY4:%[0-9]+]]:_(<4 x s32>) = COPY $xmm0
   ; X64:   [[COPY5:%[0-9]+]]:_(<4 x s32>) = COPY $xmm1
-  ; X64:   [[MV2:%[0-9]+]]:_(<8 x s32>) = G_MERGE_VALUES [[COPY4]](<4 x s32>), [[COPY5]](<4 x s32>)
+  ; X64:   [[MV2:%[0-9]+]]:_(<8 x s32>) = G_CONCAT_VECTORS [[COPY4]](<4 x s32>), [[COPY5]](<4 x s32>)
   ; X64:   ADJCALLSTACKUP64 0, 0, implicit-def $rsp, implicit-def $eflags, implicit-def $ssp, implicit $rsp, implicit $ssp
   ; X64:   [[ADD:%[0-9]+]]:_(<8 x s32>) = G_ADD [[MV]], [[MV2]]
   ; X64:   [[UV2:%[0-9]+]]:_(<4 x s32>), [[UV3:%[0-9]+]]:_(<4 x s32>) = G_UNMERGE_VALUES [[ADD]](<8 x s32>)
@@ -684,7 +692,8 @@ define void @test_variadic_call_2(i8** %addr_ptr, double* %val_ptr) {
   ; X64:   [[LOAD1:%[0-9]+]]:_(s64) = G_LOAD [[COPY1]](p0) :: (load 8 from %ir.val_ptr)
   ; X64:   ADJCALLSTACKDOWN64 0, 0, 0, implicit-def $rsp, implicit-def $eflags, implicit-def $ssp, implicit $rsp, implicit $ssp
   ; X64:   $rdi = COPY [[LOAD]](p0)
-  ; X64:   $xmm0 = COPY [[LOAD1]](s64)
+  ; X64:   [[ANYEXT:%[0-9]+]]:_(s128) = G_ANYEXT [[LOAD1]](s64)
+  ; X64:   $xmm0 = COPY [[ANYEXT]](s128)
   ; X64:   $al = MOV8ri 1
   ; X64:   CALL64pcrel32 @variadic_callee, csr_64, implicit $rsp, implicit $ssp, implicit $rdi, implicit $xmm0, implicit $al
   ; X64:   ADJCALLSTACKUP64 0, 0, implicit-def $rsp, implicit-def $eflags, implicit-def $ssp, implicit $rsp, implicit $ssp

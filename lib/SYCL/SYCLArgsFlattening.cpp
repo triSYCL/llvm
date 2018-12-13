@@ -233,7 +233,7 @@ doPromotion(Function *F, SmallPtrSetImpl<Argument *> &ArgsToPromote,
   NF->setSubprogram(F->getSubprogram());
   F->setSubprogram(nullptr);
 
-  DEBUG(dbgs() << "ARG PROMOTION:  Promoting to:" << *NF << "\n"
+  LLVM_DEBUG(dbgs() << "ARG PROMOTION:  Promoting to:" << *NF << "\n"
                << "From: " << *F);
 
   // Recompute the parameter attributes list based on the new arguments for
@@ -439,7 +439,7 @@ doPromotion(Function *F, SmallPtrSetImpl<Argument *> &ArgsToPromote,
         I2->setName(I->getName() + ".val");
         LI->replaceAllUsesWith(&*I2);
         LI->eraseFromParent();
-        DEBUG(dbgs() << "*** Promoted load of argument '" << I->getName()
+        LLVM_DEBUG(dbgs() << "*** Promoted load of argument '" << I->getName()
                      << "' in function '" << F->getName() << "'\n");
       } else {
         GetElementPtrInst *GEP = cast<GetElementPtrInst>(I->user_back());
@@ -466,7 +466,7 @@ doPromotion(Function *F, SmallPtrSetImpl<Argument *> &ArgsToPromote,
         NewName += ".val";
         TheArg->setName(NewName);
 
-        DEBUG(dbgs() << "*** Promoted agg argument '" << TheArg->getName()
+        LLVM_DEBUG(dbgs() << "*** Promoted agg argument '" << TheArg->getName()
                      << "' of function '" << NF->getName() << "'\n");
 
         // All of the uses must be load instructions.  Replace them all with
@@ -617,7 +617,7 @@ static bool isSafeToPromoteArgument(Argument *Arg, bool isByValOrInAlloca,
 
   // If the function has ancestor kernel, force to do argument promotion
   if (sycl::isTransitivelyCalledFromKernel(*F, FunctionsCalledByKernel)) {
-    DEBUG(dbgs() << "SYCL: " << F->getName() << "has ancestor kernel.\n");
+    LLVM_DEBUG(dbgs() << "SYCL: " << F->getName() << "has ancestor kernel.\n");
     isRelatedToKernel = true;
   }
 
@@ -625,7 +625,7 @@ static bool isSafeToPromoteArgument(Argument *Arg, bool isByValOrInAlloca,
   // index 0 is valid.
   if (isRelatedToKernel) {
     SafeToUnconditionallyLoad.insert(IndicesVector(1, 0));
-    DEBUG(dbgs() << "SYCL: " << F->getName()
+    LLVM_DEBUG(dbgs() << "SYCL: " << F->getName()
           << " force to make any load with first index 0 is valid.\n");
   }
 
@@ -650,7 +650,7 @@ static bool isSafeToPromoteArgument(Argument *Arg, bool isByValOrInAlloca,
               // We found a non-constant GEP index for this argument? Bail out
               // right away, can't promote this argument at all.
               return false;
-              DEBUG(dbgs() << "SYCL: " << Arg->getName()
+              LLVM_DEBUG(dbgs() << "SYCL: " << Arg->getName()
                            << " in " << F->getName()
                            << " used in non-constant GEP index.\n");
               return false;
@@ -688,7 +688,7 @@ static bool isSafeToPromoteArgument(Argument *Arg, bool isByValOrInAlloca,
         // TODO: This runs the above loop over and over again for dead GEPs
         // Couldn't we just do increment the UI iterator earlier and erase the
         // use?
-        DEBUG(dbgs() << "SYCL: Dead GEP" << *GEP << "\n");
+        LLVM_DEBUG(dbgs() << "SYCL: Dead GEP" << *GEP << "\n");
         return isSafeToPromoteArgument(Arg, isByValOrInAlloca, AAR,
                                        MaxElements, CG);
       }
@@ -696,13 +696,13 @@ static bool isSafeToPromoteArgument(Argument *Arg, bool isByValOrInAlloca,
       // Ensure that all of the indices are constants.
       for (User::op_iterator i = GEP->idx_begin(), e = GEP->idx_end(); i != e;
            ++i) {
-        DEBUG(dbgs() << "SYCL: " << Arg->getName() << " used in GEP: "
+        LLVM_DEBUG(dbgs() << "SYCL: " << Arg->getName() << " used in GEP: "
                      << *GEP << "\n");
         if (ConstantInt *C = dyn_cast<ConstantInt>(*i)) {
-          DEBUG(dbgs() << C->getSExtValue() << " constant extend value.\n");
+          LLVM_DEBUG(dbgs() << C->getSExtValue() << " constant extend value.\n");
           Operands.push_back(C->getSExtValue());
         } else {
-          DEBUG(dbgs() << "Not a constant operand GEP.\n");
+          LLVM_DEBUG(dbgs() << "Not a constant operand GEP.\n");
           return false; // Not a constant operand GEP!
         }
       }
@@ -716,13 +716,13 @@ static bool isSafeToPromoteArgument(Argument *Arg, bool isByValOrInAlloca,
           Loads.push_back(LI);
         } else {
           // Other uses than load?
-          DEBUG(dbgs() << "SYCL: " << Arg->getName() << " used in GEP: "
+          LLVM_DEBUG(dbgs() << "SYCL: " << Arg->getName() << " used in GEP: "
                        << *GEP << " in " <<  F->getName() << "\n"
                        << "User: " << *GEPU << "\n");
           return false;
         }
     } else {
-      DEBUG(dbgs() << "SYCL: " << Arg->getName() << " used in " << F->getName()
+      LLVM_DEBUG(dbgs() << "SYCL: " << Arg->getName() << " used in " << F->getName()
                    << " is not load or GEP.\n" << "User: " << *UR << "\n");
       return false; // Not a load or a GEP.
     }
@@ -730,7 +730,7 @@ static bool isSafeToPromoteArgument(Argument *Arg, bool isByValOrInAlloca,
     // Now, see if it is safe to promote this load / loads of this GEP. Loading
     // is safe if Operands, or a prefix of Operands, is marked as safe.
     if (!prefixIn(Operands, SafeToUnconditionallyLoad)) {
-      DEBUG(dbgs() << "SYCL: " << Arg->getName() << " used in "
+      LLVM_DEBUG(dbgs() << "SYCL: " << Arg->getName() << " used in "
                    << F->getName() << " is not PrefixIn.\n");
       return false;
     }
@@ -740,7 +740,7 @@ static bool isSafeToPromoteArgument(Argument *Arg, bool isByValOrInAlloca,
     // to do.
     if (ToPromote.find(Operands) == ToPromote.end()) {
       if (MaxElements > 0 && ToPromote.size() == MaxElements) {
-        DEBUG(dbgs() << "SYCL-args-flattening not promoting argument '"
+        LLVM_DEBUG(dbgs() << "SYCL-args-flattening not promoting argument '"
                      << Arg->getName()
                      << "' because it would require adding more "
                      << "than " << MaxElements
@@ -778,7 +778,7 @@ static bool isSafeToPromoteArgument(Argument *Arg, bool isByValOrInAlloca,
     MemoryLocation Loc = MemoryLocation::get(Load);
     if (AAR.canInstructionRangeModRef(BB->front(), *Load, Loc, ModRefInfo::Mod)
         && !isRelatedToKernel) {
-      DEBUG(dbgs() << "SYCL: " << Arg->getName() << " used in " << F->getName()
+      LLVM_DEBUG(dbgs() << "SYCL: " << Arg->getName() << " used in " << F->getName()
                    << " but " << *Load << " is invalidated.\n");
       return false; // Pointer is invalidated!
     }
@@ -789,7 +789,7 @@ static bool isSafeToPromoteArgument(Argument *Arg, bool isByValOrInAlloca,
     for (BasicBlock *P : predecessors(BB)) {
       for (BasicBlock *TranspBB : inverse_depth_first_ext(P, TranspBlocks))
         if (AAR.canBasicBlockModify(*TranspBB, Loc) && !isRelatedToKernel) {
-          DEBUG(dbgs() << "SYCL: " << Arg->getName() << " used in "
+          LLVM_DEBUG(dbgs() << "SYCL: " << Arg->getName() << " used in "
                        << F->getName()
                        << " every path from the entry block to the load is not transparency.\n");
           return false;
@@ -951,14 +951,14 @@ promoteArguments(CallGraph &CG,
 
     // If the function has ancestor kernel, force to do argument promotion
     if (sycl::isTransitivelyCalledFromKernel(*F, FunctionsCalledByKernel)) {
-      DEBUG(dbgs() << "SYCL: " << F->getName() << "has ancestor kernel.\n");
+      LLVM_DEBUG(dbgs() << "SYCL: " << F->getName() << "has ancestor kernel.\n");
       isSafeToPromote = true;
     }
 
     if (isSafeToPromote) {
       if (StructType *STy = dyn_cast<StructType>(AgTy)) {
         if (MaxElements > 0 && STy->getNumElements() > MaxElements) {
-          DEBUG(dbgs() << "SYCL-args-flattening disable promoting argument '"
+          LLVM_DEBUG(dbgs() << "SYCL-args-flattening disable promoting argument '"
                        << PtrArg->getName()
                        << "' because it would require adding more"
                        << " than " << MaxElements

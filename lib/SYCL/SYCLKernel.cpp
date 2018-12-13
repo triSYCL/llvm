@@ -65,7 +65,7 @@ bool isKernel(const Function &F) {
                       nullptr,
                       &Status) };
     if (Demangled) {
-      DEBUG(errs() << " Demangled: " << Demangled.get() << "\n");
+      LLVM_DEBUG(errs() << " Demangled: " << Demangled.get() << "\n");
       // A kernel is just a function starting with the well known name
       return StringRef { Demangled.get() }.startswith(SYCLKernelPrefix);
     }
@@ -73,7 +73,7 @@ bool isKernel(const Function &F) {
   };
 
   auto KernelFound = lookForKernel();
-  DEBUG(if (KernelFound)
+  LLVM_DEBUG(if (KernelFound)
           errs() << "\n\tKernel found!\n\n");
 
   return KernelFound;

@@ -61,7 +61,7 @@ struct RELGCD : public ModulePass {
 
 
   bool doInitialization(Module &M) override {
-    DEBUG(errs() << "Enter: " << M.getModuleIdentifier() << "\n\n");
+    LLVM_DEBUG(errs() << "Enter: " << M.getModuleIdentifier() << "\n\n");
 
     // Do not change the code
     return false;
@@ -69,7 +69,7 @@ struct RELGCD : public ModulePass {
 
 
   bool doFinalization(Module &M) override {
-    DEBUG(errs() << "Exit: " << M.getModuleIdentifier() << "\n\n");
+    LLVM_DEBUG(errs() << "Exit: " << M.getModuleIdentifier() << "\n\n");
 
     // Do not change the code
     return false;
@@ -83,7 +83,7 @@ bool removeEmptyGlobalArray(Module &M,
                             llvm::Statistic &S) {
   auto GL = M.getGlobalVariable(GlobalVariableName);
   if (GL) {
-    DEBUG(errs() << "Found " << GlobalVariableName << "\n\n");
+    LLVM_DEBUG(errs() << "Found " << GlobalVariableName << "\n\n");
     GL->getType()->dump();
     if (auto PT = dyn_cast<PointerType>(GL->getType()))
       // If it is an array, try to get the pointee array

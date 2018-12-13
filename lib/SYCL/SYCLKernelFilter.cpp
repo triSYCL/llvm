@@ -53,7 +53,7 @@ struct SYCLKernelFilter : public ModulePass {
 
 
   bool doInitialization(Module &M) override {
-    DEBUG(errs() << "Enter: " << M.getModuleIdentifier() << "\n\n");
+    LLVM_DEBUG(errs() << "Enter: " << M.getModuleIdentifier() << "\n\n");
 
     // Do not change the code
     return false;
@@ -61,7 +61,7 @@ struct SYCLKernelFilter : public ModulePass {
 
 
   bool doFinalization(Module &M) override {
-    DEBUG(errs() << "Exit: " << M.getModuleIdentifier() << "\n\n");
+    LLVM_DEBUG(errs() << "Exit: " << M.getModuleIdentifier() << "\n\n");
 
     // Do not change the code
     return false;
@@ -81,7 +81,7 @@ struct SYCLKernelFilter : public ModulePass {
   /// Mark non kernels with internal linkage so the GlobalDCE pass may discard
   /// them if they are not used
   void handleNonKernel(Function &F) {
-    DEBUG(errs() << "\tmark function with InternalLinkage: ";
+    LLVM_DEBUG(errs() << "\tmark function with InternalLinkage: ";
           errs().write_escaped(F.getName()) << '\n');
     F.setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
     SYCLNonKernelFound++;
@@ -91,7 +91,7 @@ struct SYCLKernelFilter : public ModulePass {
   /// Visit all the module content
   bool runOnModule(Module &M) override {
     for (auto &F : M.functions()) {
-      DEBUG(errs() << "Function: ";
+      LLVM_DEBUG(errs() << "Function: ";
             errs().write_escaped(F.getName()) << '\n');
       // Only consider definition of functions
       if (!F.isDeclaration()) {
@@ -105,7 +105,7 @@ struct SYCLKernelFilter : public ModulePass {
     // The global variables may keep references to some functions, so mark them
     // as internal too
     for (auto &G : M.globals()) {
-      DEBUG(errs() << "Global: " << G.getName() << '\n');
+      LLVM_DEBUG(errs() << "Global: " << G.getName() << '\n');
       // Skip intrinsic variable for now.
       // \todo Factorize out Function::isIntrinsic to something higher?
       if (!G.isDeclaration()

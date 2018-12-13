@@ -147,7 +147,7 @@ struct SYCLSerializeArguments : public ModulePass {
 
 
   bool doInitialization(Module &M) override {
-    DEBUG(errs() << "Enter: " << M.getModuleIdentifier() << "\n\n");
+    LLVM_DEBUG(errs() << "Enter: " << M.getModuleIdentifier() << "\n\n");
 
     // Do not change the code
     return false;
@@ -155,7 +155,7 @@ struct SYCLSerializeArguments : public ModulePass {
 
 
   bool doFinalization(Module &M) override {
-    DEBUG(errs() << "Exit: " << M.getModuleIdentifier() << "\n\n");
+    LLVM_DEBUG(errs() << "Exit: " << M.getModuleIdentifier() << "\n\n");
 
     // Do not change the code
     return false;
@@ -200,15 +200,15 @@ struct SYCLSerializeArguments : public ModulePass {
     std::size_t IndexNumber = 0;
     // Iterate on the kernel call arguments
     for (auto &A : KernelCallSite.args()) {
-      DEBUG(dbgs() << "Serializing '" << A->getName() << "'.\n");
-      DEBUG(dbgs() << "Size '" << DL.getTypeAllocSize(A->getType()) << "'.\n");
+      LLVM_DEBUG(dbgs() << "Serializing '" << A->getName() << "'.\n");
+      LLVM_DEBUG(dbgs() << "Size '" << DL.getTypeAllocSize(A->getType()) << "'.\n");
       // An IR version of the index number
       auto Index = Builder.getInt64(IndexNumber);
 
       // \todo Refactor/fuse the then/else part
       if (auto PTy = dyn_cast<PointerType>(A->getType())) {
-        DEBUG(dbgs() << " pointer to\n");
-        DEBUG(PTy->getElementType()->dump());
+        LLVM_DEBUG(dbgs() << " pointer to\n");
+        LLVM_DEBUG(PTy->getElementType()->dump());
         // The pointer argument casted to a void *
         auto Arg =
           Builder.CreatePointerCast(&*A, Type::getInt8PtrTy(F.getContext()));

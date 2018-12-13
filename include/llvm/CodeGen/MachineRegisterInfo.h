@@ -20,6 +20,7 @@
 #include "llvm/ADT/IndexedMap.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/CodeGen/GlobalISel/RegisterBank.h"
 #include "llvm/CodeGen/LowLevelType.h"
@@ -75,6 +76,13 @@ private:
              VirtReg2IndexFunctor>
       VRegInfo;
 
+  /// Map for recovering vreg name from vreg number.
+  /// This map is used by the MIR Printer.
+  IndexedMap<std::string, VirtReg2IndexFunctor> VReg2Name;
+
+  /// StringSet that is used to unique vreg names.
+  StringSet<> VRegNames;
+
   /// The flag is true upon \p UpdatedCSRs initialization
   /// and false otherwise.
   bool IsUpdatedCSRsInitialized;
@@ -128,9 +136,9 @@ private:
   /// started.
   BitVector ReservedRegs;
 
-  using VRegToTypeMap = DenseMap<unsigned, LLT>;
-  /// Map generic virtual registers to their actual size.
-  mutable std::unique_ptr<VRegToTypeMap> VRegToType;
+  using VRegToTypeMap = IndexedMap<LLT, VirtReg2IndexFunctor>;
+  /// Map generic virtual registers to their low-level type.
+  VRegToTypeMap VRegToType;
 
   /// Keep track of the physical registers that are live in to the function.
   /// Live in values are typically arguments in registers.  LiveIn values are
@@ -418,6 +426,20 @@ public:
   /// specified register (it may be live-in).
   bool def_empty(unsigned RegNo) const { return def_begin(RegNo) == def_end(); }
 
+  StringRef getVRegName(unsigned Reg) const {
+    return VReg2Name.inBounds(Reg) ? StringRef(VReg2Name[Reg]) : "";
+  }
+
+  void insertVRegByName(StringRef Name, unsigned Reg) {
+    assert((Name.empty() || VRegNames.find(Name) == VRegNames.end()) &&
+           "Named VRegs Must be Unique.");
+    if (!Name.empty()) {
+      VRegNames.insert(Name);
+      VReg2Name.grow(Reg);
+      VReg2Name[Reg] = Name.str();
+    }
+  }
+
   /// Return true if there is exactly one operand defining the specified
   /// register.
   bool hasOneDef(unsigned RegNo) const {
@@ -667,15 +689,14 @@ public:
                                                unsigned MinNumRegs = 0);
 
   /// Constrain the register class or the register bank of the virtual register
-  /// \p Reg to be a common subclass and a common bank of both registers
-  /// provided respectively. Do nothing if any of the attributes (classes,
-  /// banks, or low-level types) of the registers are deemed incompatible, or if
-  /// the resulting register will have a class smaller than before and of size
-  /// less than \p MinNumRegs. Return true if such register attributes exist,
-  /// false otherwise.
+  /// \p Reg (and low-level type) to be a common subclass or a common bank of
+  /// both registers provided respectively (and a common low-level type). Do
+  /// nothing if any of the attributes (classes, banks, or low-level types) of
+  /// the registers are deemed incompatible, or if the resulting register will
+  /// have a class smaller than before and of size less than \p MinNumRegs.
+  /// Return true if such register attributes exist, false otherwise.
   ///
-  /// \note Assumes that each register has either a low-level type or a class
-  /// assigned, but not both. Use this method instead of constrainRegClass and
+  /// \note Use this method instead of constrainRegClass and
   /// RegisterBankInfo::constrainGenericRegister everywhere but SelectionDAG
   /// ISel / FastISel and GlobalISel's InstructionSelect pass respectively.
   bool constrainRegAttrs(unsigned Reg, unsigned ConstrainingReg,
@@ -692,26 +713,27 @@ public:
 
   /// createVirtualRegister - Create and return a new virtual register in the
   /// function with the specified register class.
-  unsigned createVirtualRegister(const TargetRegisterClass *RegClass);
+  unsigned createVirtualRegister(const TargetRegisterClass *RegClass,
+                                 StringRef Name = "");
 
-  /// Accessor for VRegToType. This accessor should only be used
-  /// by global-isel related work.
-  VRegToTypeMap &getVRegToType() const {
-    if (!VRegToType)
-      VRegToType.reset(new VRegToTypeMap);
-    return *VRegToType.get();
-  }
+  /// Create and return a new virtual register in the function with the same
+  /// attributes as the given register.
+  unsigned cloneVirtualRegister(unsigned VReg, StringRef Name = "");
 
-  /// Get the low-level type of \p VReg or LLT{} if VReg is not a generic
+  /// Get the low-level type of \p Reg or LLT{} if Reg is not a generic
   /// (target independent) virtual register.
-  LLT getType(unsigned VReg) const;
+  LLT getType(unsigned Reg) const {
+    if (TargetRegisterInfo::isVirtualRegister(Reg) && VRegToType.inBounds(Reg))
+      return VRegToType[Reg];
+    return LLT{};
+  }
 
   /// Set the low-level type of \p VReg to \p Ty.
   void setType(unsigned VReg, LLT Ty);
 
   /// Create and return a new generic virtual register with low-level
   /// type \p Ty.
-  unsigned createGenericVirtualRegister(LLT Ty);
+  unsigned createGenericVirtualRegister(LLT Ty, StringRef Name = "");
 
   /// Remove all types associated to virtual registers (after instruction
   /// selection and constraining of all generic virtual registers).
@@ -722,7 +744,7 @@ public:
   /// temporarily while constructing machine instructions. Most operations are
   /// undefined on an incomplete register until one of setRegClass(),
   /// setRegBank() or setSize() has been called on it.
-  unsigned createIncompleteVirtualRegister();
+  unsigned createIncompleteVirtualRegister(StringRef Name = "");
 
   /// getNumVirtRegs - Return the number of virtual registers created.
   unsigned getNumVirtRegs() const { return VRegInfo.size(); }

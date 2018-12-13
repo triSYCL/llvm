@@ -37,3 +37,10 @@ RISCVTargetELFStreamer::RISCVTargetELFStreamer(MCStreamer &S,
 MCELFStreamer &RISCVTargetELFStreamer::getStreamer() {
   return static_cast<MCELFStreamer &>(Streamer);
 }
+
+void RISCVTargetELFStreamer::emitDirectiveOptionPush() {}
+void RISCVTargetELFStreamer::emitDirectiveOptionPop() {}
+void RISCVTargetELFStreamer::emitDirectiveOptionRVC() {}
+void RISCVTargetELFStreamer::emitDirectiveOptionNoRVC() {}
+void RISCVTargetELFStreamer::emitDirectiveOptionRelax() {}
+void RISCVTargetELFStreamer::emitDirectiveOptionNoRelax() {}

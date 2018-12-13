@@ -32,9 +32,9 @@ endif:
 ; GCN: v_add_f64
 ; GCN: v_cndmask_b32_e32
 ; GCN: v_cndmask_b32_e32
-define amdgpu_kernel void @test_vccnz_sgpr_ifcvt_triangle64(double addrspace(1)* %out, double addrspace(2)* %in) #0 {
+define amdgpu_kernel void @test_vccnz_sgpr_ifcvt_triangle64(double addrspace(1)* %out, double addrspace(4)* %in) #0 {
 entry:
-  %v = load double, double addrspace(2)* %in
+  %v = load double, double addrspace(4)* %in
   %cc = fcmp oeq double %v, 1.000000e+00
   br i1 %cc, label %if, label %endif
 
@@ -60,8 +60,7 @@ endif:
 ; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}, v{{[0-9]+}}, vcc
 ; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}, v{{[0-9]+}}, vcc
 
-; GCN-DAG: buffer_store_dword v
-; GCN-DAG: buffer_store_dwordx2
+; GCN-DAG: buffer_store_dwordx3
 define amdgpu_kernel void @test_vccnz_ifcvt_triangle96(<3 x i32> addrspace(1)* %out, <3 x i32> addrspace(1)* %in, float %cnd) #0 {
 entry:
   %v = load <3 x i32>, <3 x i32> addrspace(1)* %in

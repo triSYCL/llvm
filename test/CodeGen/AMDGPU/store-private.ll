@@ -32,7 +32,9 @@ entry:
 ; EG: AND_INT * T{{[0-9]}}.[[BI_CHAN:[XYZW]]], KC0[2].Y, literal.x
 ; EG: LSHL * T{{[0-9]}}.[[SHIFT_CHAN:[XYZW]]], PV.[[BI_CHAN]], literal.x
 ; EG-NEXT: 3(4.203895e-45)
-; EG: AND_INT * T{{[0-9]}}.[[TRUNC_CHAN:[XYZW]]], KC0[2].Z, literal.x
+
+
+; EG: LSHL * T{{[0-9]}}.[[TRUNC_CHAN:[XYZW]]], literal.x, PV.W
 ; EG-NEXT: 255(3.573311e-43)
 
 ; EG: NOT_INT
@@ -57,12 +59,12 @@ entry:
 ; EG: MOVA_INT * AR.x (MASKED)
 ; EG: MOV [[OLD:T[0-9]\.[XYZW]]], {{.*}}AR.x
 
+; EG: VTX_READ_16
+
 ; IG 0: Get the byte index and truncate the value
 ; EG: AND_INT * T{{[0-9]}}.[[BI_CHAN:[XYZW]]], KC0[2].Y, literal.x
 ; EG: LSHL * T{{[0-9]}}.[[SHIFT_CHAN:[XYZW]]], PV.[[BI_CHAN]], literal.x
 ; EG-NEXT: 3(4.203895e-45)
-; EG: AND_INT * T{{[0-9]}}.[[TRUNC_CHAN:[XYZW]]], KC0[2].Z, literal.x
-; EG-NEXT: 65535(9.183409e-41)
 
 ; EG: NOT_INT
 ; EG: AND_INT {{[\* ]*}}[[CLR_CHAN:T[0-9]\.[XYZW]]], {{.*}}[[OLD]]
@@ -689,11 +691,11 @@ entry:
 ; XSI: buffer_store_dwordx2
 ; SI: buffer_store_dword
 ; SI: buffer_store_dword
-define amdgpu_kernel void @vecload2(i32 addrspace(5)* nocapture %out, i32 addrspace(2)* nocapture %mem) #0 {
+define amdgpu_kernel void @vecload2(i32 addrspace(5)* nocapture %out, i32 addrspace(4)* nocapture %mem) #0 {
 entry:
-  %0 = load i32, i32 addrspace(2)* %mem, align 4
-  %arrayidx1.i = getelementptr inbounds i32, i32 addrspace(2)* %mem, i64 1
-  %1 = load i32, i32 addrspace(2)* %arrayidx1.i, align 4
+  %0 = load i32, i32 addrspace(4)* %mem, align 4
+  %arrayidx1.i = getelementptr inbounds i32, i32 addrspace(4)* %mem, i64 1
+  %1 = load i32, i32 addrspace(4)* %arrayidx1.i, align 4
   store i32 %0, i32 addrspace(5)* %out, align 4
   %arrayidx1 = getelementptr inbounds i32, i32 addrspace(5)* %out, i64 1
   store i32 %1, i32 addrspace(5)* %arrayidx1, align 4

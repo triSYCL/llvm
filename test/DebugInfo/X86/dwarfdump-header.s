@@ -2,8 +2,9 @@
 # We have a representative set of units: v4 CU, v5 CU, v4 TU, v5 split TU.
 # We have v4 and v5 line-table headers.
 #
-# RUN: llvm-mc -triple x86_64-unknown-linux %s -filetype=obj -o - | \
-# RUN: llvm-dwarfdump -v - | FileCheck %s
+# RUN: llvm-mc -triple x86_64-unknown-linux %s -filetype=obj -o %t.o
+# RUN: llvm-dwarfdump -v %t.o | FileCheck %s
+# RUN: llvm-dwarfdump -verify %t.o | FileCheck %s --check-prefix=VERIFY
 
         .section .debug_str,"MS",@progbits,1
 str_producer:
@@ -137,6 +138,7 @@ CU_split_5_version:
         .byte 5                 # DWARF Unit Type
         .byte 8                 # Address Size (in bytes)
         .long .debug_abbrev.dwo # Offset Into Abbrev. Section
+        .quad 0x5a              # DWO ID
 # The split compile-unit DIE, with DW_AT_producer, DW_AT_name, DW_AT_stmt_list.
         .byte 1
         .long dwo_producer
@@ -145,10 +147,42 @@ CU_split_5_version:
         .byte 0 # NULL
 CU_split_5_end:
 
-# CHECK: 0x00000000: Compile Unit: length = 0x00000016 version = 0x0005 unit_type = DW_UT_split_compile abbr_offset = 0x0000 addr_size = 0x08 (next unit at 0x0000001a)
-# CHECK: 0x0000000c: DW_TAG_compile_unit
+# CHECK: 0x00000000: Compile Unit: length = 0x0000001e version = 0x0005 unit_type = DW_UT_split_compile abbr_offset = 0x0000 addr_size = 0x08 DWO_id = 0x000000000000005a (next unit at 0x00000022)
+# CHECK: 0x00000014: DW_TAG_compile_unit
 # CHECK-NEXT: DW_AT_producer {{.*}} "Handmade DWO producer"
 # CHECK-NEXT: DW_AT_name {{.*}} "V5_dwo_compile_unit"
+
+# Now a DWARF v5 type unit, which goes in a .debug_info.dwo comdat.
+# Note there will not be another ".debug_info.dwo contents:" line, even though
+# there is a separate ELF section header; it's dumped along with the previous
+# unit as if they were in a single section.
+
+        .section .debug_info.dwo,"G",@progbits,5555,comdat
+# CHECK-NOT: .debug_info.dwo
+
+# DWARF v5 split type unit header.
+TU_split_5_start:
+        .long  TU_split_5_end-TU_split_5_version  # Length of Unit
+TU_split_5_version:
+        .short 5               # DWARF version number
+        .byte 6                # DWARF Unit Type
+        .byte 8                # Address Size (in bytes)
+        .long .debug_abbrev.dwo    # Offset Into Abbrev. Section
+        .quad 0x8899aabbccddeeff # Type Signature
+        .long TU_split_5_type-TU_split_5_start  # Type offset
+# The type-unit DIE, which has a name.
+        .byte 2
+        .long dwo_TU_5
+# The type DIE, which has a name.
+TU_split_5_type:
+        .byte 3
+        .long dwo_TU_5
+        .byte 0 # NULL
+        .byte 0 # NULL
+TU_split_5_end:
+
+# CHECK: 0x00000000: Type Unit: length = 0x00000020 version = 0x0005 unit_type = DW_UT_split_type abbr_offset = 0x0000 addr_size = 0x08 name = 'V5_split_type_unit' type_signature = 0x8899aabbccddeeff type_offset = 0x001d (next unit at 0x00000024)
+# CHECK: 0x00000018: DW_TAG_type_unit
 
         .section .debug_types,"",@progbits
 # CHECK-LABEL: .debug_types contents:
@@ -175,34 +209,6 @@ TU_4_end:
 
 # CHECK: 0x00000000: Type Unit: length = 0x0000001f version = 0x0004 abbr_offset = 0x0000 addr_size = 0x08 name = 'V4_type_unit' type_signature = 0x0011223344556677 type_offset = 0x001c (next unit at 0x00000023)
 # CHECK: 0x00000017: DW_TAG_type_unit
-
-        .section .debug_types.dwo,"",@progbits
-# FIXME: DWARF v5 wants type units in .debug_info[.dwo] not .debug_types[.dwo].
-# CHECK: .debug_types.dwo contents:
-
-# DWARF v5 split type unit header.
-TU_split_5_start:
-        .long  TU_split_5_end-TU_split_5_version  # Length of Unit
-TU_split_5_version:
-        .short 5               # DWARF version number
-        .byte 6                # DWARF Unit Type
-        .byte 8                # Address Size (in bytes)
-        .long .debug_abbrev.dwo    # Offset Into Abbrev. Section
-        .quad 0x8899aabbccddeeff # Type Signature
-        .long TU_split_5_type-TU_split_5_start  # Type offset
-# The type-unit DIE, which has a name.
-        .byte 2
-        .long dwo_TU_5
-# The type DIE, which has a name.
-TU_split_5_type:
-        .byte 3
-        .long dwo_TU_5
-        .byte 0 # NULL
-        .byte 0 # NULL
-TU_split_5_end:
-
-# CHECK: 0x00000000: Type Unit: length = 0x00000020 version = 0x0005 unit_type = DW_UT_split_type abbr_offset = 0x0000 addr_size = 0x08 name = 'V5_split_type_unit' type_signature = 0x8899aabbccddeeff type_offset = 0x001d (next unit at 0x00000024)
-# CHECK: 0x00000018: DW_TAG_type_unit
 
         .section .debug_line,"",@progbits
 # CHECK-LABEL: .debug_line contents:
@@ -258,8 +264,16 @@ LH_4_end:
 # CHECK: include_directories[  1] = "Directory4a"
 # CHECK: include_directories[  2] = "Directory4b"
 # CHECK-NOT: include_directories
-# CHECK: file_names[  1]    1 0x00000041 0x00000042 "File4a"
-# CHECK: file_names[  2]    0 0x00000043 0x00000044 "File4b"
+# CHECK: file_names[  1]:
+# CHECK-NEXT: name: "File4a"
+# CHECK-NEXT: dir_index: 1
+# CHECK-NEXT: mod_time: 0x00000041
+# CHECK-NEXT: length: 0x00000042
+# CHECK: file_names[  2]:
+# CHECK-NEXT: name: "File4b"
+# CHECK-NEXT: dir_index: 0
+# CHECK-NEXT: mod_time: 0x00000043
+# CHECK-NEXT: length: 0x00000044
 # CHECK-NOT: file_names
 
 # DWARF v5 line-table header.
@@ -329,9 +343,14 @@ LH_5_end:
 # CHECK: include_directories[  0] = .debug_str[0x00000045] = "Directory5a"
 # CHECK: include_directories[  1] = .debug_str[0x00000051] = "Directory5b"
 # CHECK-NOT: include_directories
-# CHECK: MD5 Checksum
-# CHECK: file_names[  1]    0 00112233445566778899aabbccddeeff .debug_line_str[0x00000000] = "File5a"
-# CHECK: file_names[  2]    1 ffeeddccbbaa99887766554433221100 .debug_line_str[0x00000007] = "File5b"
+# CHECK: file_names[  0]:
+# CHECK-NEXT: name: .debug_line_str[0x00000000] = "File5a"
+# CHECK-NEXT: dir_index: 0
+# CHECK-NEXT: md5_checksum: 00112233445566778899aabbccddeeff
+# CHECK: file_names[  1]:
+# CHECK-NEXT: name: .debug_line_str[0x00000007] = "File5b"
+# CHECK-NEXT: dir_index: 1
+# CHECK-NEXT: md5_checksum: ffeeddccbbaa99887766554433221100
 # CHECK-NOT: file_names
 
         .section .debug_line_str,"MS",@progbits,1
@@ -410,6 +429,17 @@ dwo_LH_5_end:
 # CHECK: include_directories[  0] = .debug_str[0x0000003d] = "DWODirectory5a"
 # CHECK: include_directories[  1] = .debug_str[0x0000004c] = "DWODirectory5b"
 # CHECK-NOT: include_directories
-# CHECK: file_names[  1]    0 0x00000015 0x00000025 "DWOFile5a"
-# CHECK: file_names[  2]    1 0x00000035 0x00000045 "DWOFile5b"
+# CHECK: file_names[  0]:
+# CHECK-NEXT: name: "DWOFile5a"
+# CHECK-NEXT: dir_index: 0
+# CHECK-NEXT: mod_time: 0x00000015
+# CHECK-NEXT: length: 0x00000025
+# CHECK: file_names[  1]:
+# CHECK-NEXT: name: "DWOFile5b"
+# CHECK-NEXT: dir_index: 1
+# CHECK-NEXT: mod_time: 0x00000035
+# CHECK-NEXT: length: 0x00000045
 # CHECK-NOT: file_names
+
+# VERIFY: Verifying .debug_types
+# VERIFY: No errors.

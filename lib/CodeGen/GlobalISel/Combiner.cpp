@@ -12,18 +12,56 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/GlobalISel/Combiner.h"
-#include "llvm/CodeGen/GlobalISel/CombinerInfo.h"
-#include "llvm/CodeGen/GlobalISel/MachineIRBuilder.h"
-#include "llvm/CodeGen/MachineOptimizationRemarkEmitter.h"
-#include "llvm/CodeGen/GlobalISel/GISelWorkList.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/CodeGen/GlobalISel/CombinerInfo.h"
+#include "llvm/CodeGen/GlobalISel/GISelChangeObserver.h"
+#include "llvm/CodeGen/GlobalISel/GISelWorkList.h"
+#include "llvm/CodeGen/GlobalISel/MachineIRBuilder.h"
 #include "llvm/CodeGen/GlobalISel/Utils.h"
+#include "llvm/CodeGen/MachineOptimizationRemarkEmitter.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "gi-combiner"
 
 using namespace llvm;
+
+namespace {
+/// This class acts as the glue the joins the CombinerHelper to the overall
+/// Combine algorithm. The CombinerHelper is intended to report the
+/// modifications it makes to the MIR to the CombinerChangeObserver and the
+/// observer subclass will act on these events. In this case, instruction
+/// erasure will cancel any future visits to the erased instruction and
+/// instruction creation will schedule that instruction for a future visit.
+/// Other Combiner implementations may require more complex behaviour from
+/// their CombinerChangeObserver subclass.
+class WorkListMaintainer : public GISelChangeObserver {
+  using WorkListTy = GISelWorkList<512>;
+  WorkListTy &WorkList;
+
+public:
+  WorkListMaintainer(WorkListTy &WorkList) : WorkList(WorkList) {}
+  virtual ~WorkListMaintainer() {}
+
+  void erasingInstr(MachineInstr &MI) override {
+    LLVM_DEBUG(dbgs() << "Erased: " << MI << "\n");
+    WorkList.remove(&MI);
+  }
+  void createdInstr(MachineInstr &MI) override {
+    LLVM_DEBUG(dbgs() << "Created: " << MI << "\n");
+    WorkList.insert(&MI);
+  }
+  void changingInstr(MachineInstr &MI) override {
+    LLVM_DEBUG(dbgs() << "Changing: " << MI << "\n");
+    WorkList.remove(&MI);
+  }
+  // Currently changed conservatively assumes erased.
+  void changedInstr(MachineInstr &MI) override {
+    LLVM_DEBUG(dbgs() << "Changed: " << MI << "\n");
+    WorkList.remove(&MI);
+  }
+};
+}
 
 Combiner::Combiner(CombinerInfo &Info, const TargetPassConfig *TPC)
     : CInfo(Info), TPC(TPC) {
@@ -40,7 +78,7 @@ bool Combiner::combineMachineInstrs(MachineFunction &MF) {
   MRI = &MF.getRegInfo();
   Builder.setMF(MF);
 
-  DEBUG(dbgs() << "Generic MI Combiner for: " << MF.getName() << '\n');
+  LLVM_DEBUG(dbgs() << "Generic MI Combiner for: " << MF.getName() << '\n');
 
   MachineOptimizationRemarkEmitter MORE(MF, /*MBFI=*/nullptr);
 
@@ -53,6 +91,7 @@ bool Combiner::combineMachineInstrs(MachineFunction &MF) {
     // down RPOT.
     Changed = false;
     GISelWorkList<512> WorkList;
+    WorkListMaintainer Observer(WorkList);
     for (MachineBasicBlock *MBB : post_order(&MF)) {
       if (MBB->empty())
         continue;
@@ -61,7 +100,7 @@ bool Combiner::combineMachineInstrs(MachineFunction &MF) {
         ++MII;
         // Erase dead insts before even adding to the list.
         if (isTriviallyDead(*CurMI, *MRI)) {
-          DEBUG(dbgs() << *CurMI << "Is dead; erasing.\n");
+          LLVM_DEBUG(dbgs() << *CurMI << "Is dead; erasing.\n");
           CurMI->eraseFromParentAndMarkDBGValuesForRemoval();
           continue;
         }
@@ -71,8 +110,8 @@ bool Combiner::combineMachineInstrs(MachineFunction &MF) {
     // Main Loop. Process the instructions here.
     while (!WorkList.empty()) {
       MachineInstr *CurrInst = WorkList.pop_back_val();
-      DEBUG(dbgs() << "Try combining " << *CurrInst << "\n";);
-      Changed |= CInfo.combine(*CurrInst, Builder);
+      LLVM_DEBUG(dbgs() << "Try combining " << *CurrInst << "\n";);
+      Changed |= CInfo.combine(Observer, *CurrInst, Builder);
     }
     MFChanged |= Changed;
   } while (Changed);

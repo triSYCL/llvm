@@ -1,6 +1,6 @@
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -enable-ipra=0 -verify-machineinstrs < %s | FileCheck -check-prefixes=GCN,CI %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=fiji -enable-ipra=0 -verify-machineinstrs < %s | FileCheck -check-prefixes=GCN,VI,VI-NOBUG %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=iceland -enable-ipra=0 -verify-machineinstrs < %s | FileCheck -check-prefixes=GCN,VI,VI-BUG %s
+; RUN: llc -mtriple=amdgcn-amd-amdhsa -mattr=-code-object-v3 -enable-ipra=0 -verify-machineinstrs < %s | FileCheck -check-prefixes=GCN,CI %s
+; RUN: llc -mtriple=amdgcn-amd-amdhsa -mattr=-code-object-v3 -mcpu=fiji -enable-ipra=0 -verify-machineinstrs < %s | FileCheck -check-prefixes=GCN,VI,VI-NOBUG %s
+; RUN: llc -mtriple=amdgcn-amd-amdhsa -mattr=-code-object-v3 -mcpu=iceland -enable-ipra=0 -verify-machineinstrs < %s | FileCheck -check-prefixes=GCN,VI,VI-BUG %s
 
 ; Make sure to run a GPU with the SGPR allocation bug.
 
@@ -146,7 +146,7 @@ define void @use_stack1() #1 {
 }
 
 ; GCN-LABEL: {{^}}indirect_use_stack:
-; GCN: ScratchSize: 2124
+; GCN: ScratchSize: 2132
 define void @indirect_use_stack() #1 {
   %alloca = alloca [16 x i32], align 4, addrspace(5)
   call void asm sideeffect "; use $0", "v"([16 x i32] addrspace(5)* %alloca) #0
@@ -156,7 +156,7 @@ define void @indirect_use_stack() #1 {
 
 ; GCN-LABEL: {{^}}indirect_2_level_use_stack:
 ; GCN: is_dynamic_callstack = 0
-; GCN: ScratchSize: 2124
+; GCN: ScratchSize: 2132
 define amdgpu_kernel void @indirect_2_level_use_stack() #0 {
   call void @indirect_use_stack()
   ret void
@@ -199,7 +199,7 @@ define amdgpu_kernel void @usage_external_recurse() #0 {
 }
 
 ; GCN-LABEL: {{^}}direct_recursion_use_stack:
-; GCN: ScratchSize: 2056
+; GCN: ScratchSize: 2064
 define void @direct_recursion_use_stack(i32 %val) #2 {
   %alloca = alloca [512 x i32], align 4, addrspace(5)
   call void asm sideeffect "; use $0", "v"([512 x i32] addrspace(5)* %alloca) #0
@@ -218,7 +218,7 @@ ret:
 ; GCN-LABEL: {{^}}usage_direct_recursion:
 ; GCN: is_ptr64 = 1
 ; GCN: is_dynamic_callstack = 1
-; GCN: workitem_private_segment_byte_size = 2056
+; GCN: workitem_private_segment_byte_size = 2064
 define amdgpu_kernel void @usage_direct_recursion(i32 %n) #0 {
   call void @direct_recursion_use_stack(i32 %n)
   ret void

@@ -55,7 +55,7 @@ define <16 x i8> @vselect_packss_v16i16(<16 x i16> %a0, <16 x i16> %a1, <16 x i8
 ; AVX512NOBW-LABEL: vselect_packss_v16i16:
 ; AVX512NOBW:       # %bb.0:
 ; AVX512NOBW-NEXT:    vpcmpeqw %ymm1, %ymm0, %ymm0
-; AVX512NOBW-NEXT:    vpmovsxwd %ymm0, %zmm0
+; AVX512NOBW-NEXT:    vpmovzxwd {{.*#+}} zmm0 = ymm0[0],zero,ymm0[1],zero,ymm0[2],zero,ymm0[3],zero,ymm0[4],zero,ymm0[5],zero,ymm0[6],zero,ymm0[7],zero,ymm0[8],zero,ymm0[9],zero,ymm0[10],zero,ymm0[11],zero,ymm0[12],zero,ymm0[13],zero,ymm0[14],zero,ymm0[15],zero
 ; AVX512NOBW-NEXT:    vpmovdb %zmm0, %xmm0
 ; AVX512NOBW-NEXT:    vpblendvb %xmm0, %xmm2, %xmm3, %xmm0
 ; AVX512NOBW-NEXT:    vzeroupper
@@ -136,13 +136,11 @@ define <16 x i8> @vselect_packss_v16i32(<16 x i32> %a0, <16 x i32> %a1, <16 x i8
 ; AVX2:       # %bb.0:
 ; AVX2-NEXT:    vpcmpeqd %ymm3, %ymm1, %ymm1
 ; AVX2-NEXT:    vpcmpeqd %ymm2, %ymm0, %ymm0
-; AVX2-NEXT:    vpacksswb %ymm1, %ymm0, %ymm0
+; AVX2-NEXT:    vpackssdw %ymm1, %ymm0, %ymm0
 ; AVX2-NEXT:    vpermq {{.*#+}} ymm0 = ymm0[0,2,1,3]
 ; AVX2-NEXT:    vextracti128 $1, %ymm0, %xmm1
 ; AVX2-NEXT:    vpacksswb %xmm1, %xmm0, %xmm0
-; AVX2-NEXT:    vpand %xmm4, %xmm0, %xmm1
-; AVX2-NEXT:    vpandn %xmm5, %xmm0, %xmm0
-; AVX2-NEXT:    vpor %xmm0, %xmm1, %xmm0
+; AVX2-NEXT:    vpblendvb %xmm0, %xmm4, %xmm5, %xmm0
 ; AVX2-NEXT:    vzeroupper
 ; AVX2-NEXT:    retq
 ;
@@ -284,7 +282,7 @@ define <16 x i8> @vselect_packss_v16i64(<16 x i64> %a0, <16 x i64> %a1, <16 x i8
 ; AVX2-NEXT:    vpcmpeqq %ymm4, %ymm0, %ymm0
 ; AVX2-NEXT:    vpackssdw %ymm1, %ymm0, %ymm0
 ; AVX2-NEXT:    vpermq {{.*#+}} ymm0 = ymm0[0,2,1,3]
-; AVX2-NEXT:    vpacksswb %ymm2, %ymm0, %ymm0
+; AVX2-NEXT:    vpackssdw %ymm2, %ymm0, %ymm0
 ; AVX2-NEXT:    vpermq {{.*#+}} ymm0 = ymm0[0,2,1,3]
 ; AVX2-NEXT:    vextracti128 $1, %ymm0, %xmm1
 ; AVX2-NEXT:    vpacksswb %xmm1, %xmm0, %xmm0

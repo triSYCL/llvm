@@ -34,6 +34,7 @@ void llvm::initializeIPO(PassRegistry &Registry) {
   initializeGlobalDCELegacyPassPass(Registry);
   initializeGlobalOptLegacyPassPass(Registry);
   initializeGlobalSplitPass(Registry);
+  initializeHotColdSplittingLegacyPassPass(Registry);
   initializeIPCPPass(Registry);
   initializeAlwaysInlinerLegacyPassPass(Registry);
   initializeSimpleInlinerPass(Registry);
@@ -48,6 +49,7 @@ void llvm::initializeIPO(PassRegistry &Registry) {
   initializePostOrderFunctionAttrsLegacyPassPass(Registry);
   initializeReversePostOrderFunctionAttrsLegacyPassPass(Registry);
   initializePruneEHPass(Registry);
+  initializeIPSCCPLegacyPassPass(Registry);
   initializeStripDeadPrototypesLegacyPassPass(Registry);
   initializeStripSymbolsPass(Registry);
   initializeStripDebugDeclarePass(Registry);

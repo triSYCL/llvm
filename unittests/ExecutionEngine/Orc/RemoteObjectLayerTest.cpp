@@ -24,8 +24,7 @@ public:
 
   using ObjHandleT = uint64_t;
 
-  using ObjectPtr =
-    std::shared_ptr<object::OwningBinary<object::ObjectFile>>;
+  using ObjectPtr = std::unique_ptr<MemoryBuffer>;
 
   using LookupFn = std::function<JITSymbol(StringRef, bool)>;
   using SymbolLookupTable = std::map<ObjHandleT, LookupFn>;
@@ -43,7 +42,7 @@ public:
 
   Expected<ObjHandleT> addObject(ObjectPtr Obj,
             std::shared_ptr<JITSymbolResolver> Resolver) {
-    return AddObject(Obj, SymTab);
+    return AddObject(std::move(Obj), SymTab);
   }
 
   Error removeObject(ObjHandleT H) {
@@ -102,8 +101,7 @@ MockObjectLayer::ObjectPtr createTestObject() {
   B.CreateRet(ConstantInt::getSigned(Type::getInt32Ty(Ctx), 42));
 
   SimpleCompiler IRCompiler(*TM);
-  return std::make_shared<object::OwningBinary<object::ObjectFile>>(
-           IRCompiler(*MB.getModule()));
+  return IRCompiler(*MB.getModule());
 }
 
 TEST(RemoteObjectLayer, AddObject) {
@@ -114,14 +112,13 @@ TEST(RemoteObjectLayer, AddObject) {
 
   auto Channels = createPairedQueueChannels();
 
-  auto ReportError =
-    [](Error Err) {
-      logAllUnhandledErrors(std::move(Err), llvm::errs(), "");
-    };
+  auto ReportError = [](Error Err) {
+    logAllUnhandledErrors(std::move(Err), llvm::errs());
+  };
 
   // Copy the bytes out of the test object: the copy will be used to verify
   // that the original is correctly transmitted over RPC to the mock layer.
-  StringRef ObjBytes = TestObject->getBinary()->getData();
+  StringRef ObjBytes = TestObject->getBuffer();
   std::vector<char> ObjContents(ObjBytes.size());
   std::copy(ObjBytes.begin(), ObjBytes.end(), ObjContents.begin());
 
@@ -134,7 +131,7 @@ TEST(RemoteObjectLayer, AddObject) {
                    MockObjectLayer::SymbolLookupTable &SymTab) {
 
       // Check that the received object file content matches the original.
-      StringRef RPCObjContents = Obj->getBinary()->getData();
+      StringRef RPCObjContents = Obj->getBuffer();
       EXPECT_EQ(RPCObjContents.size(), ObjContents.size())
         << "RPC'd object file has incorrect size";
       EXPECT_TRUE(std::equal(RPCObjContents.begin(), RPCObjContents.end(),
@@ -227,10 +224,9 @@ TEST(RemoteObjectLayer, RemoveObject) {
 
   auto Channels = createPairedQueueChannels();
 
-  auto ReportError =
-    [](Error Err) {
-      logAllUnhandledErrors(std::move(Err), llvm::errs(), "");
-    };
+  auto ReportError = [](Error Err) {
+    logAllUnhandledErrors(std::move(Err), llvm::errs());
+  };
 
   RPCEndpoint ClientEP(*Channels.first, true);
   RemoteObjectClientLayer<RPCEndpoint> Client(ClientEP, ReportError);
@@ -491,10 +487,9 @@ TEST(RemoteObjectLayer, EmitAndFinalize) {
 
   auto Channels = createPairedQueueChannels();
 
-  auto ReportError =
-    [](Error Err) {
-      logAllUnhandledErrors(std::move(Err), llvm::errs(), "");
-    };
+  auto ReportError = [](Error Err) {
+    logAllUnhandledErrors(std::move(Err), llvm::errs());
+  };
 
   RPCEndpoint ClientEP(*Channels.first, true);
   RemoteObjectClientLayer<RPCEndpoint> Client(ClientEP, ReportError);

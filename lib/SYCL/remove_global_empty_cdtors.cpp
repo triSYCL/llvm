@@ -83,8 +83,8 @@ bool removeEmptyGlobalArray(Module &M,
                             llvm::Statistic &S) {
   auto GL = M.getGlobalVariable(GlobalVariableName);
   if (GL) {
-    LLVM_DEBUG(errs() << "Found " << GlobalVariableName << "\n\n");
-    GL->getType()->dump();
+    LLVM_DEBUG(errs() << "Found " << GlobalVariableName << "\n\n";
+               GL->getType()->dump());
     if (auto PT = dyn_cast<PointerType>(GL->getType()))
       // If it is an array, try to get the pointee array
       if (auto AT = dyn_cast<ArrayType>(PT->getElementType()))

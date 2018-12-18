@@ -1,5 +1,6 @@
 ; RUN: opt < %s -lcssa -S | FileCheck %s
 ; RUN: opt < %s -passes=lcssa -S | FileCheck %s
+; RUN: opt < %s -debugify -lcssa -S | FileCheck -check-prefix=DEBUGIFY %s
 
 define void @lcssa(i1 %S2) {
 ; CHECK-LABEL: @lcssa
@@ -18,12 +19,12 @@ post.if:		; preds = %if.false, %if.true
 	br i1 %S2, label %loop.exit, label %loop.interior
 loop.exit:		; preds = %post.if
 ; CHECK: %X3.lcssa = phi i32
+; DEBUGIFY: %X3.lcssa = phi i32 {{.*}}, !dbg ![[DbgLoc:[0-9]+]]
+; DEBUGIFY-NEXT: call void @llvm.dbg.value(metadata i32 %X3.lcssa
 ; CHECK: %X4 = add i32 3, %X3.lcssa
-
-; CHECK2: call void @llvm.dbg.value(metadata i32 %X3.lcssa, metadata !11, metadata !DIExpression()), !dbg !19
-; CHECK2-NEXT: add i32 3, %X3.lcssa
-; CHECK2: ret void
 	%X4 = add i32 3, %X3		; <i32> [#uses=0]
 	ret void
 }
 
+; Make sure the lcssa phi has %X3's debug location
+; DEBUGIFY: ![[DbgLoc]] = !DILocation(line: 7

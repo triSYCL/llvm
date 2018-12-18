@@ -192,6 +192,14 @@ struct SymbolCU {
   DwarfCompileUnit *CU;
 };
 
+/// The kind of accelerator tables we should emit.
+enum class AccelTableKind {
+  Default, ///< Platform default.
+  None,    ///< None.
+  Apple,   ///< .apple_names, .apple_namespaces, .apple_types, .apple_objc.
+  Dwarf,   ///< DWARF v5 .debug_names.
+};
+
 /// Collects and handles dwarf debug information.
 class DwarfDebug : public DebugHandlerBase {
   /// All DIEValues are allocated through this allocator.
@@ -255,9 +263,28 @@ class DwarfDebug : public DebugHandlerBase {
   /// Whether to emit all linkage names, or just abstract subprograms.
   bool UseAllLinkageNames;
 
+  /// Use inlined strings.
+  bool UseInlineStrings = false;
+
+  /// Whether to emit DWARF pub sections or not.
+  bool UsePubSections = true;
+
+  /// Allow emission of .debug_ranges section.
+  bool UseRangesSection = true;
+
+  /// True if the sections itself must be used as references and don't create
+  /// temp symbols inside DWARF sections.
+  bool UseSectionsAsReferences = false;
+
+  ///Allow emission of the .debug_loc section.
+  bool UseLocSection = true;
+
+  /// Generate DWARF v4 type units.
+  bool GenerateTypeUnits;
+
   /// DWARF5 Experimental Options
   /// @{
-  bool HasDwarfAccelTables;
+  AccelTableKind TheAccelTableKind;
   bool HasAppleExtensionAttributes;
   bool HasSplitDwarf;
 
@@ -289,11 +316,12 @@ class DwarfDebug : public DebugHandlerBase {
 
   AddressPool AddrPool;
 
-  /// Apple accelerator tables.
-  AppleAccelTable<AppleAccelTableOffsetData> AccelNames;
-  AppleAccelTable<AppleAccelTableOffsetData> AccelObjC;
-  AppleAccelTable<AppleAccelTableOffsetData> AccelNamespace;
-  AppleAccelTable<AppleAccelTableTypeData> AccelTypes;
+  /// Accelerator tables.
+  AccelTable<DWARF5AccelTableData> AccelDebugNames;
+  AccelTable<AppleAccelTableOffsetData> AccelNames;
+  AccelTable<AppleAccelTableOffsetData> AccelObjC;
+  AccelTable<AppleAccelTableOffsetData> AccelNamespace;
+  AccelTable<AppleAccelTableTypeData> AccelTypes;
 
   // Identify a debugger for "tuning" the debug info.
   DebuggerKind DebuggerTuning = DebuggerKind::Default;
@@ -306,9 +334,9 @@ class DwarfDebug : public DebugHandlerBase {
 
   using InlinedVariable = DbgValueHistoryMap::InlinedVariable;
 
-  void ensureAbstractVariableIsCreated(DwarfCompileUnit &CU, InlinedVariable Var,
+  void ensureAbstractVariableIsCreated(DwarfCompileUnit &CU, InlinedVariable IV,
                                        const MDNode *Scope);
-  void ensureAbstractVariableIsCreatedIfScoped(DwarfCompileUnit &CU, InlinedVariable Var,
+  void ensureAbstractVariableIsCreatedIfScoped(DwarfCompileUnit &CU, InlinedVariable IV,
                                                const MDNode *Scope);
 
   DbgVariable *createConcreteVariable(DwarfCompileUnit &TheCU,
@@ -316,6 +344,10 @@ class DwarfDebug : public DebugHandlerBase {
 
   /// Construct a DIE for this abstract scope.
   void constructAbstractSubprogramScopeDIE(DwarfCompileUnit &SrcCU, LexicalScope *Scope);
+
+  template <typename DataT>
+  void addAccelNameImpl(AccelTable<DataT> &AppleAccel, StringRef Name,
+                        const DIE &Die);
 
   void finishVariableDefinitions();
 
@@ -337,6 +369,9 @@ class DwarfDebug : public DebugHandlerBase {
   /// Emit a specified accelerator table.
   template <typename AccelTableT>
   void emitAccel(AccelTableT &Accel, MCSection *Section, StringRef TableName);
+
+  /// Emit DWARF v5 accelerator table.
+  void emitAccelDebugNames();
 
   /// Emit visible names into a hashed accelerator table section.
   void emitAccelNames();
@@ -373,6 +408,9 @@ class DwarfDebug : public DebugHandlerBase {
   /// Emit address ranges into a debug ranges section.
   void emitDebugRanges();
 
+  /// Emit range lists into a DWARF v5 debug rnglists section.
+  void emitDebugRnglists();
+
   /// Emit macros into a debug macinfo section.
   void emitDebugMacinfo();
   void emitMacro(DIMacro &M);
@@ -385,8 +423,13 @@ class DwarfDebug : public DebugHandlerBase {
   void initSkeletonUnit(const DwarfUnit &U, DIE &Die,
                         std::unique_ptr<DwarfCompileUnit> NewU);
 
-  /// Construct the split debug info compile unit for the debug info
-  /// section.
+  /// Construct the split debug info compile unit for the debug info section.
+  /// In DWARF v5, the skeleton unit DIE may have the following attributes:
+  /// DW_AT_addr_base, DW_AT_comp_dir, DW_AT_dwo_name, DW_AT_high_pc,
+  /// DW_AT_low_pc, DW_AT_ranges, DW_AT_stmt_list, and DW_AT_str_offsets_base.
+  /// Prior to DWARF v5 it may also have DW_AT_GNU_dwo_id. DW_AT_GNU_dwo_name
+  /// is used instead of DW_AT_dwo_name, Dw_AT_GNU_addr_base instead of
+  /// DW_AT_addr_base, and DW_AT_GNU_ranges_base instead of DW_AT_rnglists_base.
   DwarfCompileUnit &constructSkeletonCU(const DwarfCompileUnit &CU);
 
   /// Emit the debug info dwo section.
@@ -403,6 +446,9 @@ class DwarfDebug : public DebugHandlerBase {
 
   /// Emit the debug str dwo section.
   void emitDebugStrDWO();
+
+  /// Emit DWO addresses.
+  void emitDebugAddr();
 
   /// Flags to let the linker know we have emitted new style pubnames. Only
   /// emit it here if we don't have a skeleton CU for split dwarf.
@@ -434,6 +480,9 @@ class DwarfDebug : public DebugHandlerBase {
   /// Collect variable information from the side table maintained by MF.
   void collectVariableInfoFromMFTable(DwarfCompileUnit &TheCU,
                                       DenseSet<InlinedVariable> &P);
+
+  /// Emit the reference to the section.
+  void emitSectionReference(const DwarfCompileUnit &CU);
 
 protected:
   /// Gather pre-function debug information.
@@ -491,11 +540,30 @@ public:
   /// DWARF4 format.
   bool useDWARF2Bitfields() const { return UseDWARF2Bitfields; }
 
+  /// Returns whether to use inline strings.
+  bool useInlineStrings() const { return UseInlineStrings; }
+
+  /// Returns whether GNU pub sections should be emitted.
+  bool usePubSections() const { return UsePubSections; }
+
+  /// Returns whether ranges section should be emitted.
+  bool useRangesSection() const { return UseRangesSection; }
+
+  /// Returns whether to use sections as labels rather than temp symbols.
+  bool useSectionsAsReferences() const {
+    return UseSectionsAsReferences;
+  }
+
+  /// Returns whether .debug_loc section should be emitted.
+  bool useLocSection() const { return UseLocSection; }
+
+  /// Returns whether to generate DWARF v4 type units.
+  bool generateTypeUnits() const { return GenerateTypeUnits; }
+
   // Experimental DWARF5 features.
 
-  /// Returns whether or not to emit tables that dwarf consumers can
-  /// use to accelerate lookup.
-  bool useDwarfAccelTables() const { return HasDwarfAccelTables; }
+  /// Returns what kind (if any) of accelerator tables to emit.
+  AccelTableKind getAccelTableKind() const { return TheAccelTableKind; }
 
   bool useAppleExtensionAttributes() const {
     return HasAppleExtensionAttributes;
@@ -560,6 +628,9 @@ public:
 
   /// Find the matching DwarfCompileUnit for the given CU DIE.
   DwarfCompileUnit *lookupCU(const DIE *Die) { return CUDieMap.lookup(Die); }
+  const DwarfCompileUnit *lookupCU(const DIE *Die) const {
+    return CUDieMap.lookup(Die);
+  }
 
   /// \defgroup DebuggerTuning Predicates to tune DWARF for a given debugger.
   ///

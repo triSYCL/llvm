@@ -98,7 +98,7 @@ protected:
   /// corresponds to the MDNode mapped with the subprogram DIE.
   DenseMap<DIE *, const DINode *> ContainingTypeMap;
 
-  DwarfUnit(dwarf::Tag, const DICompileUnit *CU, AsmPrinter *A, DwarfDebug *DW,
+  DwarfUnit(dwarf::Tag, const DICompileUnit *Node, AsmPrinter *A, DwarfDebug *DW,
             DwarfFile *DWU);
 
   bool applySubprogramDefinitionAttributes(const DISubprogram *SP, DIE &SPDie);
@@ -111,6 +111,8 @@ public:
   AsmPrinter* getAsmPrinter() const { return Asm; }
   uint16_t getLanguage() const { return CUNode->getSourceLanguage(); }
   const DICompileUnit *getCUNode() const { return CUNode; }
+
+  uint16_t getDwarfVersion() const { return DD->getDwarfVersion(); }
 
   /// Return true if this compile unit has something to write out.
   bool hasContent() const { return getUnitDie().hasChildren(); }
@@ -185,7 +187,7 @@ public:
 
   /// Add a dwarf op address data and value using the form given and an
   /// op of either DW_FORM_addr or DW_FORM_GNU_addr_index.
-  void addOpAddress(DIELoc &Die, const MCSymbol *Label);
+  void addOpAddress(DIELoc &Die, const MCSymbol *Sym);
 
   /// Add a label delta attribute data and value.
   void addLabelDelta(DIE &Die, dwarf::Attribute Attribute, const MCSymbol *Hi,
@@ -201,7 +203,7 @@ public:
   void addDIETypeSignature(DIE &Die, uint64_t Signature);
 
   /// Add block data.
-  void addBlock(DIE &Die, dwarf::Attribute Attribute, DIELoc *Block);
+  void addBlock(DIE &Die, dwarf::Attribute Attribute, DIELoc *Loc);
 
   /// Add block data.
   void addBlock(DIE &Die, dwarf::Attribute Attribute, DIEBlock *Block);
@@ -258,7 +260,7 @@ public:
                                  bool SkipSPAttributes = false);
 
   /// Find existing DIE or create new DIE for the given type.
-  DIE *getOrCreateTypeDIE(const MDNode *N);
+  DIE *getOrCreateTypeDIE(const MDNode *TyNode);
 
   /// Get context owner's DIE.
   DIE *getOrCreateContextDIE(const DIScope *Context);
@@ -293,6 +295,9 @@ public:
   /// Add the DW_AT_str_offsets_base attribute to the unit DIE.
   void addStringOffsetsStart();
 
+  /// Add the DW_AT_rnglists_base attribute to the unit DIE.
+  void addRnglistsBase();
+
   virtual DwarfCompileUnit &getCU() = 0;
 
   void constructTypeDIE(DIE &Buffer, const DICompositeType *CTy);
@@ -306,6 +311,10 @@ public:
                                       const MCSymbol *Label,
                                       const MCSymbol *Sec);
 
+  /// If the \p File has an MD5 checksum, return it as an MD5Result
+  /// allocated in the MCContext.
+  MD5::MD5Result *getMD5AsBytes(const DIFile *File) const;
+
 protected:
   ~DwarfUnit();
 
@@ -315,10 +324,6 @@ protected:
   /// Look up the source ID for the given file. If none currently exists,
   /// create a new ID and insert it in the line table.
   virtual unsigned getOrCreateSourceID(const DIFile *File) = 0;
-
-  /// If the \p File has an MD5 checksum, return it as an MD5Result
-  /// allocated in the MCContext.
-  MD5::MD5Result *getMD5AsBytes(const DIFile *File);
 
   /// Look in the DwarfDebug map for the MDNode that corresponds to the
   /// reference.
@@ -337,11 +342,11 @@ protected:
 private:
   void constructTypeDIE(DIE &Buffer, const DIBasicType *BTy);
   void constructTypeDIE(DIE &Buffer, const DIDerivedType *DTy);
-  void constructTypeDIE(DIE &Buffer, const DISubroutineType *DTy);
+  void constructTypeDIE(DIE &Buffer, const DISubroutineType *CTy);
   void constructSubrangeDIE(DIE &Buffer, const DISubrange *SR, DIE *IndexTy);
   void constructArrayTypeDIE(DIE &Buffer, const DICompositeType *CTy);
   void constructEnumTypeDIE(DIE &Buffer, const DICompositeType *CTy);
-  void constructMemberDIE(DIE &Buffer, const DIDerivedType *DT);
+  DIE &constructMemberDIE(DIE &Buffer, const DIDerivedType *DT);
   void constructTemplateTypeParameterDIE(DIE &Buffer,
                                          const DITemplateTypeParameter *TP);
   void constructTemplateValueParameterDIE(DIE &Buffer,
@@ -367,6 +372,7 @@ class DwarfTypeUnit final : public DwarfUnit {
   const DIE *Ty;
   DwarfCompileUnit &CU;
   MCDwarfDwoLineTable *SplitLineTable;
+  bool UsedLineTable = false;
 
   unsigned getOrCreateSourceID(const DIFile *File) override;
   bool isDwoUnit() const override;

@@ -253,18 +253,23 @@ TEST(TargetParserTest, testARMCPU) {
                          "8-A"));
   EXPECT_TRUE(testARMCPU("exynos-m1", "armv8-a", "crypto-neon-fp-armv8",
                          ARM::AEK_CRC | ARM::AEK_SEC | ARM::AEK_MP |
-                             ARM::AEK_VIRT | ARM::AEK_HWDIVARM |
-                             ARM::AEK_HWDIVTHUMB | ARM::AEK_DSP,
+                         ARM::AEK_VIRT | ARM::AEK_HWDIVARM |
+                         ARM::AEK_HWDIVTHUMB | ARM::AEK_DSP,
                          "8-A"));
   EXPECT_TRUE(testARMCPU("exynos-m2", "armv8-a", "crypto-neon-fp-armv8",
                          ARM::AEK_CRC | ARM::AEK_SEC | ARM::AEK_MP |
-                             ARM::AEK_VIRT | ARM::AEK_HWDIVARM |
-                             ARM::AEK_HWDIVTHUMB | ARM::AEK_DSP,
+                         ARM::AEK_VIRT | ARM::AEK_HWDIVARM |
+                         ARM::AEK_HWDIVTHUMB | ARM::AEK_DSP,
                          "8-A"));
   EXPECT_TRUE(testARMCPU("exynos-m3", "armv8-a", "crypto-neon-fp-armv8",
                          ARM::AEK_CRC | ARM::AEK_SEC | ARM::AEK_MP |
-                             ARM::AEK_VIRT | ARM::AEK_HWDIVARM |
-                             ARM::AEK_HWDIVTHUMB | ARM::AEK_DSP,
+                         ARM::AEK_VIRT | ARM::AEK_HWDIVARM |
+                         ARM::AEK_HWDIVTHUMB | ARM::AEK_DSP,
+                         "8-A"));
+  EXPECT_TRUE(testARMCPU("exynos-m4", "armv8-a", "crypto-neon-fp-armv8",
+                         ARM::AEK_CRC | ARM::AEK_SEC | ARM::AEK_MP |
+                         ARM::AEK_VIRT | ARM::AEK_HWDIVARM |
+                         ARM::AEK_HWDIVTHUMB | ARM::AEK_DSP,
                          "8-A"));
   EXPECT_TRUE(testARMCPU("cortex-m23", "armv8-m.base", "none",
                          ARM::AEK_HWDIVTHUMB, "8-M.Baseline"));
@@ -277,6 +282,20 @@ TEST(TargetParserTest, testARMCPU) {
   EXPECT_TRUE(testARMCPU("swift", "armv7s", "neon-vfpv4",
                          ARM::AEK_HWDIVARM | ARM::AEK_HWDIVTHUMB | ARM::AEK_DSP,
                          "7-S"));
+}
+
+static constexpr unsigned NumARMCPUArchs = 83;
+
+TEST(TargetParserTest, testARMCPUArchList) {
+  SmallVector<StringRef, NumARMCPUArchs> List;
+  ARM::fillValidCPUArchList(List);
+
+  // No list exists for these in this test suite, so ensure all are
+  // valid, and match the expected 'magic' count.
+  EXPECT_EQ(List.size(), NumARMCPUArchs);
+  for(StringRef CPU : List) {
+    EXPECT_NE(ARM::parseCPUArch(CPU), ARM::ArchKind::INVALID);
+  }
 }
 
 TEST(TargetParserTest, testInvalidARMArch) {
@@ -714,6 +733,10 @@ TEST(TargetParserTest, testAArch64CPU) {
       AArch64::AEK_CRC | AArch64::AEK_CRYPTO | AArch64::AEK_FP |
       AArch64::AEK_SIMD, "8-A"));
   EXPECT_TRUE(testAArch64CPU(
+      "exynos-m4", "armv8-a", "crypto-neon-fp-armv8",
+      AArch64::AEK_CRC | AArch64::AEK_CRYPTO | AArch64::AEK_FP |
+      AArch64::AEK_SIMD, "8-A"));
+  EXPECT_TRUE(testAArch64CPU(
       "falkor", "armv8-a", "crypto-neon-fp-armv8",
       AArch64::AEK_CRC | AArch64::AEK_CRYPTO | AArch64::AEK_FP |
       AArch64::AEK_SIMD | AArch64::AEK_RDM, "8-A"));
@@ -745,6 +768,20 @@ TEST(TargetParserTest, testAArch64CPU) {
       AArch64::AEK_CRC | AArch64::AEK_CRYPTO | AArch64::AEK_SIMD |
       AArch64::AEK_FP | AArch64::AEK_PROFILE,
       "8-A"));
+}
+
+static constexpr unsigned NumAArch64CPUArchs = 20;
+
+TEST(TargetParserTest, testAArch64CPUArchList) {
+  SmallVector<StringRef, NumAArch64CPUArchs> List;
+  AArch64::fillValidCPUArchList(List);
+
+  // No list exists for these in this test suite, so ensure all are
+  // valid, and match the expected 'magic' count.
+  EXPECT_EQ(List.size(), NumAArch64CPUArchs);
+  for(StringRef CPU : List) {
+    EXPECT_NE(AArch64::parseCPUArch(CPU), AArch64::ArchKind::INVALID);
+  }
 }
 
 bool testAArch64Arch(StringRef Arch, StringRef DefaultCPU, StringRef SubArch,
@@ -795,6 +832,8 @@ TEST(TargetParserTest, testAArch64Extension) {
   EXPECT_FALSE(testAArch64Extension("exynos-m2",
                                     AArch64::ArchKind::INVALID, "ras"));
   EXPECT_FALSE(testAArch64Extension("exynos-m3",
+                                    AArch64::ArchKind::INVALID, "ras"));
+  EXPECT_FALSE(testAArch64Extension("exynos-m4",
                                     AArch64::ArchKind::INVALID, "ras"));
   EXPECT_TRUE(testAArch64Extension("falkor",
                                    AArch64::ArchKind::INVALID, "rdm"));

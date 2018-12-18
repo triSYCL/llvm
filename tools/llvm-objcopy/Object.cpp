@@ -27,16 +27,47 @@
 #include <vector>
 
 using namespace llvm;
+using namespace llvm::objcopy;
 using namespace object;
 using namespace ELF;
 
+Buffer::~Buffer() {}
+
+void FileBuffer::allocate(size_t Size) {
+  Expected<std::unique_ptr<FileOutputBuffer>> BufferOrErr =
+      FileOutputBuffer::create(getName(), Size, FileOutputBuffer::F_executable);
+  handleAllErrors(BufferOrErr.takeError(), [this](const ErrorInfoBase &E) {
+    error("failed to open " + getName() + ": " + E.message());
+  });
+  Buf = std::move(*BufferOrErr);
+}
+
+Error FileBuffer::commit() { return Buf->commit(); }
+
+uint8_t *FileBuffer::getBufferStart() {
+  return reinterpret_cast<uint8_t *>(Buf->getBufferStart());
+}
+
+void MemBuffer::allocate(size_t Size) {
+  Buf = WritableMemoryBuffer::getNewMemBuffer(Size, getName());
+}
+
+Error MemBuffer::commit() { return Error::success(); }
+
+uint8_t *MemBuffer::getBufferStart() {
+  return reinterpret_cast<uint8_t *>(Buf->getBufferStart());
+}
+
+std::unique_ptr<WritableMemoryBuffer> MemBuffer::releaseMemoryBuffer() {
+  return std::move(Buf);
+}
+
 template <class ELFT> void ELFWriter<ELFT>::writePhdr(const Segment &Seg) {
-  using Elf_Ehdr = typename ELFT::Ehdr;
   using Elf_Phdr = typename ELFT::Phdr;
 
-  uint8_t *Buf = BufPtr->getBufferStart();
-  Buf += sizeof(Elf_Ehdr) + Seg.Index * sizeof(Elf_Phdr);
-  Elf_Phdr &Phdr = *reinterpret_cast<Elf_Phdr *>(Buf);
+  uint8_t *B = Buf.getBufferStart();
+  B += Obj.ProgramHdrSegment.Offset + Seg.Index * sizeof(Elf_Phdr);
+  Elf_Phdr &Phdr = *reinterpret_cast<Elf_Phdr *>(B);
   Phdr.p_type = Seg.Type;
   Phdr.p_flags = Seg.Flags;
   Phdr.p_offset = Seg.Offset;
@@ -48,13 +79,15 @@ template <class ELFT> void ELFWriter<ELFT>::writePhdr(const Segment &Seg) {
 }
 
 void SectionBase::removeSectionReferences(const SectionBase *Sec) {}
+void SectionBase::removeSymbols(function_ref<bool(const Symbol &)> ToRemove) {}
 void SectionBase::initialize(SectionTableRef SecTable) {}
 void SectionBase::finalize() {}
+void SectionBase::markSymbols() {}
 
 template <class ELFT> void ELFWriter<ELFT>::writeShdr(const SectionBase &Sec) {
-  uint8_t *Buf = BufPtr->getBufferStart();
-  Buf += Sec.HeaderOffset;
-  typename ELFT::Shdr &Shdr = *reinterpret_cast<typename ELFT::Shdr *>(Buf);
+  uint8_t *B = Buf.getBufferStart();
+  B += Sec.HeaderOffset;
+  typename ELFT::Shdr &Shdr = *reinterpret_cast<typename ELFT::Shdr *>(B);
   Shdr.sh_name = Sec.NameIndex;
   Shdr.sh_type = Sec.Type;
   Shdr.sh_flags = Sec.Flags;
@@ -69,6 +102,10 @@ template <class ELFT> void ELFWriter<ELFT>::writeShdr(const SectionBase &Sec) {
 
 SectionVisitor::~SectionVisitor() {}
 
+void BinarySectionWriter::visit(const SectionIndexSection &Sec) {
+  error("Cannot write symbol section index table '" + Sec.Name + "' ");
+}
+
 void BinarySectionWriter::visit(const SymbolTableSection &Sec) {
   error("Cannot write symbol table '" + Sec.Name + "' out to binary");
 }
@@ -78,7 +115,11 @@ void BinarySectionWriter::visit(const RelocationSection &Sec) {
 }
 
 void BinarySectionWriter::visit(const GnuDebugLinkSection &Sec) {
-  error("Cannot write '.gnu_debuglink' out to binary");
+  error("Cannot write '" + Sec.Name + "' out to binary");
+}
+
+void BinarySectionWriter::visit(const GroupSection &Sec) {
+  error("Cannot write '" + Sec.Name + "' out to binary");
 }
 
 void SectionWriter::visit(const Section &Sec) {
@@ -118,6 +159,29 @@ void StringTableSection::accept(SectionVisitor &Visitor) const {
   Visitor.visit(*this);
 }
 
+template <class ELFT>
+void ELFSectionWriter<ELFT>::visit(const SectionIndexSection &Sec) {
+  uint8_t *Buf = Out.getBufferStart() + Sec.Offset;
+  auto *IndexesBuffer = reinterpret_cast<typename ELFT::Word *>(Buf);
+  std::copy(std::begin(Sec.Indexes), std::end(Sec.Indexes), IndexesBuffer);
+}
+
+void SectionIndexSection::initialize(SectionTableRef SecTable) {
+  Size = 0;
+  setSymTab(SecTable.getSectionOfType<SymbolTableSection>(
+      Link,
+      "Link field value " + Twine(Link) + " in section " + Name + " is invalid",
+      "Link field value " + Twine(Link) + " in section " + Name +
+          " is not a symbol table"));
+  Symbols->setShndxTable(this);
+}
+
+void SectionIndexSection::finalize() { Link = Symbols->Index; }
+
+void SectionIndexSection::accept(SectionVisitor &Visitor) const {
+  Visitor.visit(*this);
+}
+
 static bool isValidReservedSectionIndex(uint16_t Index, uint16_t Machine) {
   switch (Index) {
   case SHN_ABS:
@@ -136,8 +200,13 @@ static bool isValidReservedSectionIndex(uint16_t Index, uint16_t Machine) {
   return false;
 }
 
+// Large indexes force us to clarify exactly what this function should do. This
+// function should return the value that will appear in st_shndx when written
+// out.
 uint16_t Symbol::getShndx() const {
   if (DefinedIn != nullptr) {
+    if (DefinedIn->Index >= SHN_LORESERVE)
+      return SHN_XINDEX;
     return DefinedIn->Index;
   }
   switch (ShndxType) {
@@ -151,9 +220,16 @@ uint16_t Symbol::getShndx() const {
   case SYMBOL_HEXAGON_SCOMMON_2:
   case SYMBOL_HEXAGON_SCOMMON_4:
   case SYMBOL_HEXAGON_SCOMMON_8:
+  case SYMBOL_XINDEX:
     return static_cast<uint16_t>(ShndxType);
   }
   llvm_unreachable("Symbol with invalid ShndxType encountered");
+}
+
+void SymbolTableSection::assignIndices() {
+  uint32_t Index = 0;
+  for (auto &Sym : Symbols)
+    Sym->Index = Index++;
 }
 
 void SymbolTableSection::addSymbol(StringRef Name, uint8_t Bind, uint8_t Type,
@@ -165,6 +241,8 @@ void SymbolTableSection::addSymbol(StringRef Name, uint8_t Bind, uint8_t Type,
   Sym.Binding = Bind;
   Sym.Type = Type;
   Sym.DefinedIn = DefinedIn;
+  if (DefinedIn != nullptr)
+    DefinedIn->HasSymbol = true;
   if (DefinedIn == nullptr) {
     if (Shndx >= SHN_LORESERVE)
       Sym.ShndxType = static_cast<SymbolShndxType>(Shndx);
@@ -180,35 +258,33 @@ void SymbolTableSection::addSymbol(StringRef Name, uint8_t Bind, uint8_t Type,
 }
 
 void SymbolTableSection::removeSectionReferences(const SectionBase *Sec) {
+  if (SectionIndexTable == Sec)
+    SectionIndexTable = nullptr;
   if (SymbolNames == Sec) {
     error("String table " + SymbolNames->Name +
           " cannot be removed because it is referenced by the symbol table " +
           this->Name);
   }
-  auto Iter =
-      std::remove_if(std::begin(Symbols), std::end(Symbols),
-                     [=](const SymPtr &Sym) { return Sym->DefinedIn == Sec; });
-  Size -= (std::end(Symbols) - Iter) * this->EntrySize;
-  Symbols.erase(Iter, std::end(Symbols));
+  removeSymbols([Sec](const Symbol &Sym) { return Sym.DefinedIn == Sec; });
 }
 
-void SymbolTableSection::localize(
-    std::function<bool(const Symbol &)> ToLocalize) {
-  for (const auto &Sym : Symbols) {
-    if (ToLocalize(*Sym))
-      Sym->Binding = STB_LOCAL;
-  }
-
-  // Now that the local symbols aren't grouped at the start we have to reorder
-  // the symbols to respect this property.
+void SymbolTableSection::updateSymbols(function_ref<void(Symbol &)> Callable) {
+  std::for_each(std::begin(Symbols) + 1, std::end(Symbols),
+                [Callable](SymPtr &Sym) { Callable(*Sym); });
   std::stable_partition(
       std::begin(Symbols), std::end(Symbols),
       [](const SymPtr &Sym) { return Sym->Binding == STB_LOCAL; });
+  assignIndices();
+}
 
-  // Lastly we fix the symbol indexes.
-  uint32_t Index = 0;
-  for (auto &Sym : Symbols)
-    Sym->Index = Index++;
+void SymbolTableSection::removeSymbols(
+    function_ref<bool(const Symbol &)> ToRemove) {
+  Symbols.erase(
+      std::remove_if(std::begin(Symbols) + 1, std::end(Symbols),
+                     [ToRemove](const SymPtr &Sym) { return ToRemove(*Sym); }),
+      std::end(Symbols));
+  Size = Symbols.size() * EntrySize;
+  assignIndices();
 }
 
 void SymbolTableSection::initialize(SectionTableRef SecTable) {
@@ -236,7 +312,17 @@ void SymbolTableSection::finalize() {
   Info = MaxLocalIndex + 1;
 }
 
-void SymbolTableSection::addSymbolNames() {
+void SymbolTableSection::prepareForLayout() {
+  // Add all potential section indexes before file layout so that the section
+  // index section has the approprite size.
+  if (SectionIndexTable != nullptr) {
+    for (const auto &Sym : Symbols) {
+      if (Sym->DefinedIn != nullptr && Sym->DefinedIn->Index >= SHN_LORESERVE)
+        SectionIndexTable->addIndex(Sym->DefinedIn->Index);
+      else
+        SectionIndexTable->addIndex(SHN_UNDEF);
+    }
+  }
   // Add all of our strings to SymbolNames so that SymbolNames has the right
   // size before layout is decided.
   for (auto &Sym : Symbols)
@@ -247,6 +333,11 @@ const Symbol *SymbolTableSection::getSymbolByIndex(uint32_t Index) const {
   if (Symbols.size() <= Index)
     error("Invalid symbol index: " + Twine(Index));
   return Symbols[Index].get();
+}
+
+Symbol *SymbolTableSection::getSymbolByIndex(uint32_t Index) {
+  return const_cast<Symbol *>(
+      static_cast<const SymbolTableSection *>(this)->getSymbolByIndex(Index));
 }
 
 template <class ELFT>
@@ -275,9 +366,10 @@ template <class SymTabType>
 void RelocSectionWithSymtabBase<SymTabType>::removeSectionReferences(
     const SectionBase *Sec) {
   if (Symbols == Sec) {
-    error("Symbol table " + Symbols->Name + " cannot be removed because it is "
-                                            "referenced by the relocation "
-                                            "section " +
+    error("Symbol table " + Symbols->Name +
+          " cannot be removed because it is "
+          "referenced by the relocation "
+          "section " +
           this->Name);
   }
 }
@@ -292,9 +384,9 @@ void RelocSectionWithSymtabBase<SymTabType>::initialize(
           " is not a symbol table"));
 
   if (Info != SHN_UNDEF)
-    setSection(SecTable.getSection(Info,
-                                   "Info field value " + Twine(Info) +
-                                       " in section " + Name + " is invalid"));
+    setSection(SecTable.getSection(Info, "Info field value " + Twine(Info) +
+                                             " in section " + Name +
+                                             " is invalid"));
   else
     setSection(nullptr);
 }
@@ -307,15 +399,15 @@ void RelocSectionWithSymtabBase<SymTabType>::finalize() {
 }
 
 template <class ELFT>
-void setAddend(Elf_Rel_Impl<ELFT, false> &Rel, uint64_t Addend) {}
+static void setAddend(Elf_Rel_Impl<ELFT, false> &Rel, uint64_t Addend) {}
 
 template <class ELFT>
-void setAddend(Elf_Rel_Impl<ELFT, true> &Rela, uint64_t Addend) {
+static void setAddend(Elf_Rel_Impl<ELFT, true> &Rela, uint64_t Addend) {
   Rela.r_addend = Addend;
 }
 
 template <class RelRange, class T>
-void writeRel(const RelRange &Relocations, T *Buf) {
+static void writeRel(const RelRange &Relocations, T *Buf) {
   for (const auto &Reloc : Relocations) {
     Buf->r_offset = Reloc.Offset;
     setAddend(*Buf, Reloc.Addend);
@@ -337,6 +429,19 @@ void RelocationSection::accept(SectionVisitor &Visitor) const {
   Visitor.visit(*this);
 }
 
+void RelocationSection::removeSymbols(
+    function_ref<bool(const Symbol &)> ToRemove) {
+  for (const Relocation &Reloc : Relocations)
+    if (ToRemove(*Reloc.RelocSymbol))
+      error("not stripping symbol `" + Reloc.RelocSymbol->Name +
+            "' because it is named in a relocation");
+}
+
+void RelocationSection::markSymbols() {
+  for (const Relocation &Reloc : Relocations)
+    Reloc.RelocSymbol->Referenced = true;
+}
+
 void SectionWriter::visit(const DynamicRelocationSection &Sec) {
   std::copy(std::begin(Sec.Contents), std::end(Sec.Contents),
             Out.getBufferStart() + Sec.Offset);
@@ -346,34 +451,49 @@ void DynamicRelocationSection::accept(SectionVisitor &Visitor) const {
   Visitor.visit(*this);
 }
 
-void SectionWithStrTab::removeSectionReferences(const SectionBase *Sec) {
-  if (StrTab == Sec) {
-    error("String table " + StrTab->Name + " cannot be removed because it is "
-                                           "referenced by the section " +
+void Section::removeSectionReferences(const SectionBase *Sec) {
+  if (LinkSection == Sec) {
+    error("Section " + LinkSection->Name +
+          " cannot be removed because it is "
+          "referenced by the section " +
           this->Name);
   }
 }
 
-bool SectionWithStrTab::classof(const SectionBase *S) {
-  return isa<DynamicSymbolTableSection>(S) || isa<DynamicSection>(S);
+void GroupSection::finalize() {
+  this->Info = Sym->Index;
+  this->Link = SymTab->Index;
 }
 
-void SectionWithStrTab::initialize(SectionTableRef SecTable) {
-  auto StrTab = SecTable.getSection(Link,
-                                    "Link field value " + Twine(Link) +
-                                        " in section " + Name + " is invalid");
-  if (StrTab->Type != SHT_STRTAB) {
-    error("Link field value " + Twine(Link) + " in section " + Name +
-          " is not a string table");
+void GroupSection::removeSymbols(function_ref<bool(const Symbol &)> ToRemove) {
+  if (ToRemove(*Sym)) {
+    error("Symbol " + Sym->Name +
+          " cannot be removed because it is "
+          "referenced by the section " +
+          this->Name + "[" + Twine(this->Index) + "]");
   }
-  setStrTab(StrTab);
 }
 
-void SectionWithStrTab::finalize() { this->Link = StrTab->Index; }
+void GroupSection::markSymbols() {
+  if (Sym)
+    Sym->Referenced = true;
+}
+
+void Section::initialize(SectionTableRef SecTable) {
+  if (Link != ELF::SHN_UNDEF) {
+    LinkSection =
+        SecTable.getSection(Link, "Link field value " + Twine(Link) +
+                                      " in section " + Name + " is invalid");
+    if (LinkSection->Type == ELF::SHT_SYMTAB)
+      LinkSection = nullptr;
+  }
+}
+
+void Section::finalize() { this->Link = LinkSection ? LinkSection->Index : 0; }
 
 void GnuDebugLinkSection::init(StringRef File, StringRef Data) {
-  FileName = sys::path::stem(File);
-  // The format for the .gnu_debuglink starts with the stemmed file name and is
+  FileName = sys::path::filename(File);
+  // The format for the .gnu_debuglink starts with the file name and is
   // followed by a null terminator and then the CRC32 of the file. The CRC32
   // should be 4 byte aligned. So we add the FileName size, a 1 for the null
   // byte, and then finally push the size to alignment and add 4.
@@ -417,6 +537,19 @@ void GnuDebugLinkSection::accept(SectionVisitor &Visitor) const {
   Visitor.visit(*this);
 }
 
+template <class ELFT>
+void ELFSectionWriter<ELFT>::visit(const GroupSection &Sec) {
+  ELF::Elf32_Word *Buf =
+      reinterpret_cast<ELF::Elf32_Word *>(Out.getBufferStart() + Sec.Offset);
+  *Buf++ = Sec.FlagWord;
+  for (const auto *S : Sec.GroupMembers)
+    support::endian::write32<ELFT::TargetEndianness>(Buf++, S->Index);
+}
+
+void GroupSection::accept(SectionVisitor &Visitor) const {
+  Visitor.visit(*this);
+}
+
 // Returns true IFF a section is wholly inside the range of a segment
 static bool sectionWithinSegment(const SectionBase &Section,
                                  const Segment &Segment) {
@@ -456,6 +589,22 @@ static bool compareSegmentsByPAddr(const Segment *A, const Segment *B) {
   return A->Index < B->Index;
 }
 
+template <class ELFT> void ELFBuilder<ELFT>::setParentSegment(Segment &Child) {
+  for (auto &Parent : Obj.segments()) {
+    // Every segment will overlap with itself but we don't want a segment to
+    // be it's own parent so we avoid that situation.
+    if (&Child != &Parent && segmentOverlapsSegment(Child, Parent)) {
+      // We want a canonical "most parental" segment but this requires
+      // inspecting the ParentSegment.
+      if (compareSegmentsByOffset(&Parent, &Child))
+        if (Child.ParentSegment == nullptr ||
+            compareSegmentsByOffset(&Parent, Child.ParentSegment)) {
+          Child.ParentSegment = &Parent;
+        }
+    }
+  }
+}
+
 template <class ELFT> void ELFBuilder<ELFT>::readProgramHeaders() {
   uint32_t Index = 0;
   for (const auto &Phdr : unwrapOrError(ElfFile.program_headers())) {
@@ -482,22 +631,70 @@ template <class ELFT> void ELFBuilder<ELFT>::readProgramHeaders() {
       }
     }
   }
+
+  auto &ElfHdr = Obj.ElfHdrSegment;
+  // Creating multiple PT_PHDR segments technically is not valid, but PT_LOAD
+  // segments must not overlap, and other types fit even less.
+  ElfHdr.Type = PT_PHDR;
+  ElfHdr.Flags = 0;
+  ElfHdr.OriginalOffset = ElfHdr.Offset = 0;
+  ElfHdr.VAddr = 0;
+  ElfHdr.PAddr = 0;
+  ElfHdr.FileSize = ElfHdr.MemSize = sizeof(Elf_Ehdr);
+  ElfHdr.Align = 0;
+  ElfHdr.Index = Index++;
+
+  const auto &Ehdr = *ElfFile.getHeader();
+  auto &PrHdr = Obj.ProgramHdrSegment;
+  PrHdr.Type = PT_PHDR;
+  PrHdr.Flags = 0;
+  // The spec requires us to have p_vaddr % p_align == p_offset % p_align.
+  // Whereas this works automatically for ElfHdr, here OriginalOffset is
+  // always non-zero and to ensure the equation we assign the same value to
+  // VAddr as well.
+  PrHdr.OriginalOffset = PrHdr.Offset = PrHdr.VAddr = Ehdr.e_phoff;
+  PrHdr.PAddr = 0;
+  PrHdr.FileSize = PrHdr.MemSize = Ehdr.e_phentsize * Ehdr.e_phnum;
+  // The spec requires us to naturally align all the fields.
+  PrHdr.Align = sizeof(Elf_Addr);
+  PrHdr.Index = Index++;
+
   // Now we do an O(n^2) loop through the segments in order to match up
   // segments.
-  for (auto &Child : Obj.segments()) {
-    for (auto &Parent : Obj.segments()) {
-      // Every segment will overlap with itself but we don't want a segment to
-      // be it's own parent so we avoid that situation.
-      if (&Child != &Parent && segmentOverlapsSegment(Child, Parent)) {
-        // We want a canonical "most parental" segment but this requires
-        // inspecting the ParentSegment.
-        if (compareSegmentsByOffset(&Parent, &Child))
-          if (Child.ParentSegment == nullptr ||
-              compareSegmentsByOffset(&Parent, Child.ParentSegment)) {
-            Child.ParentSegment = &Parent;
-          }
-      }
-    }
+  for (auto &Child : Obj.segments())
+    setParentSegment(Child);
+  setParentSegment(ElfHdr);
+  setParentSegment(PrHdr);
+}
+
+template <class ELFT>
+void ELFBuilder<ELFT>::initGroupSection(GroupSection *GroupSec) {
+  auto SecTable = Obj.sections();
+  auto SymTab = SecTable.template getSectionOfType<SymbolTableSection>(
+      GroupSec->Link,
+      "Link field value " + Twine(GroupSec->Link) + " in section " +
+          GroupSec->Name + " is invalid",
+      "Link field value " + Twine(GroupSec->Link) + " in section " +
+          GroupSec->Name + " is not a symbol table");
+  auto Sym = SymTab->getSymbolByIndex(GroupSec->Info);
+  if (!Sym)
+    error("Info field value " + Twine(GroupSec->Info) + " in section " +
+          GroupSec->Name + " is not a valid symbol index");
+  GroupSec->setSymTab(SymTab);
+  GroupSec->setSymbol(Sym);
+  if (GroupSec->Contents.size() % sizeof(ELF::Elf32_Word) ||
+      GroupSec->Contents.empty())
+    error("The content of the section " + GroupSec->Name + " is malformed");
+  const ELF::Elf32_Word *Word =
+      reinterpret_cast<const ELF::Elf32_Word *>(GroupSec->Contents.data());
+  const ELF::Elf32_Word *End =
+      Word + GroupSec->Contents.size() / sizeof(ELF::Elf32_Word);
+  GroupSec->setFlagWord(*Word++);
+  for (; Word != End; ++Word) {
+    uint32_t Index = support::endian::read32<ELFT::TargetEndianness>(Word);
+    GroupSec->addMember(SecTable.getSection(
+        Index, "Group member index " + Twine(Index) + " in section " +
+                   GroupSec->Name + " is invalid"));
   }
 }
 
@@ -505,12 +702,32 @@ template <class ELFT>
 void ELFBuilder<ELFT>::initSymbolTable(SymbolTableSection *SymTab) {
   const Elf_Shdr &Shdr = *unwrapOrError(ElfFile.getSection(SymTab->Index));
   StringRef StrTabData = unwrapOrError(ElfFile.getStringTableForSymtab(Shdr));
+  ArrayRef<Elf_Word> ShndxData;
 
-  for (const auto &Sym : unwrapOrError(ElfFile.symbols(&Shdr))) {
+  auto Symbols = unwrapOrError(ElfFile.symbols(&Shdr));
+  for (const auto &Sym : Symbols) {
     SectionBase *DefSection = nullptr;
     StringRef Name = unwrapOrError(Sym.getName(StrTabData));
 
-    if (Sym.st_shndx >= SHN_LORESERVE) {
+    if (Sym.st_shndx == SHN_XINDEX) {
+      if (SymTab->getShndxTable() == nullptr)
+        error("Symbol '" + Name +
+              "' has index SHN_XINDEX but no SHT_SYMTAB_SHNDX section exists.");
+      if (ShndxData.data() == nullptr) {
+        const Elf_Shdr &ShndxSec =
+            *unwrapOrError(ElfFile.getSection(SymTab->getShndxTable()->Index));
+        ShndxData = unwrapOrError(
+            ElfFile.template getSectionContentsAsArray<Elf_Word>(&ShndxSec));
+        if (ShndxData.size() != Symbols.size())
+          error("Symbol section index table does not have the same number of "
+                "entries as the symbol table.");
+      }
+      Elf_Word Index = ShndxData[&Sym - Symbols.begin()];
+      DefSection = Obj.sections().getSection(
+          Index,
+          "Symbol '" + Name + "' has invalid section index " +
+              Twine(Index));
+    } else if (Sym.st_shndx >= SHN_LORESERVE) {
       if (!isValidReservedSectionIndex(Sym.st_shndx, Obj.Machine)) {
         error(
             "Symbol '" + Name +
@@ -519,9 +736,9 @@ void ELFBuilder<ELFT>::initSymbolTable(SymbolTableSection *SymTab) {
       }
     } else if (Sym.st_shndx != SHN_UNDEF) {
       DefSection = Obj.sections().getSection(
-          Sym.st_shndx,
-          "Symbol '" + Name + "' is defined in invalid section with index " +
-              Twine(Sym.st_shndx));
+          Sym.st_shndx, "Symbol '" + Name +
+                            "' is defined has invalid section index " +
+                            Twine(Sym.st_shndx));
     }
 
     SymTab->addSymbol(Name, Sym.getBinding(), Sym.getType(), DefSection,
@@ -538,8 +755,8 @@ static void getAddend(uint64_t &ToSet, const Elf_Rel_Impl<ELFT, true> &Rela) {
 }
 
 template <class T>
-void initRelocations(RelocationSection *Relocs, SymbolTableSection *SymbolTable,
-                     T RelRange) {
+static void initRelocations(RelocationSection *Relocs,
+                            SymbolTableSection *SymbolTable, T RelRange) {
   for (const auto &Rel : RelRange) {
     Relocation ToAdd;
     ToAdd.Offset = Rel.r_offset;
@@ -550,14 +767,14 @@ void initRelocations(RelocationSection *Relocs, SymbolTableSection *SymbolTable,
   }
 }
 
-SectionBase *SectionTableRef::getSection(uint16_t Index, Twine ErrMsg) {
+SectionBase *SectionTableRef::getSection(uint32_t Index, Twine ErrMsg) {
   if (Index == SHN_UNDEF || Index > Sections.size())
     error(ErrMsg);
   return Sections[Index - 1].get();
 }
 
 template <class T>
-T *SectionTableRef::getSectionOfType(uint16_t Index, Twine IndexErrMsg,
+T *SectionTableRef::getSectionOfType(uint32_t Index, Twine IndexErrMsg,
                                      Twine TypeErrMsg) {
   if (T *Sec = dyn_cast<T>(getSection(Index, IndexErrMsg)))
     return Sec;
@@ -590,6 +807,9 @@ SectionBase &ELFBuilder<ELFT>::makeSection(const Elf_Shdr &Shdr) {
     // Because of this we don't need to mess with the hash tables either.
     Data = unwrapOrError(ElfFile.getSectionContents(&Shdr));
     return Obj.addSection<Section>(Data);
+  case SHT_GROUP:
+    Data = unwrapOrError(ElfFile.getSectionContents(&Shdr));
+    return Obj.addSection<GroupSection>(Data);
   case SHT_DYNSYM:
     Data = unwrapOrError(ElfFile.getSectionContents(&Shdr));
     return Obj.addSection<DynamicSymbolTableSection>(Data);
@@ -600,6 +820,11 @@ SectionBase &ELFBuilder<ELFT>::makeSection(const Elf_Shdr &Shdr) {
     auto &SymTab = Obj.addSection<SymbolTableSection>();
     Obj.SymbolTable = &SymTab;
     return SymTab;
+  }
+  case SHT_SYMTAB_SHNDX: {
+    auto &ShndxSection = Obj.addSection<SectionIndexSection>();
+    Obj.SectionIndexTable = &ShndxSection;
+    return ShndxSection;
   }
   case SHT_NOBITS:
     return Obj.addSection<Section>(Data);
@@ -631,6 +856,12 @@ template <class ELFT> void ELFBuilder<ELFT>::readSectionHeaders() {
     Sec.Index = Index++;
   }
 
+  // If a section index table exists we'll need to initialize it before we
+  // initialize the symbol table because the symbol table might need to
+  // reference it.
+  if (Obj.SectionIndexTable)
+    Obj.SectionIndexTable->initialize(Obj.sections());
+
   // Now that all of the sections have been added we can fill out some extra
   // details about symbol tables. We need the symbol table filled out before
   // any relocations.
@@ -654,6 +885,8 @@ template <class ELFT> void ELFBuilder<ELFT>::readSectionHeaders() {
       else
         initRelocations(RelSec, Obj.SymbolTable,
                         unwrapOrError(ElfFile.relas(Shdr)));
+    } else if (auto GroupSec = dyn_cast<GroupSection>(&Section)) {
+      initGroupSection(GroupSec);
     }
   }
 }
@@ -671,9 +904,13 @@ template <class ELFT> void ELFBuilder<ELFT>::build() {
   readSectionHeaders();
   readProgramHeaders();
 
+  uint32_t ShstrIndex = Ehdr.e_shstrndx;
+  if (ShstrIndex == SHN_XINDEX)
+    ShstrIndex = unwrapOrError(ElfFile.getSection(0))->sh_link;
+
   Obj.SectionNames =
       Obj.sections().template getSectionOfType<StringTableSection>(
-          Ehdr.e_shstrndx,
+          ShstrIndex,
           "e_shstrndx field value " + Twine(Ehdr.e_shstrndx) +
               " in elf header " + " is invalid",
           "e_shstrndx field value " + Twine(Ehdr.e_shstrndx) +
@@ -689,41 +926,33 @@ Writer::~Writer() {}
 
 Reader::~Reader() {}
 
-ELFReader::ELFReader(StringRef File) {
-  auto BinaryOrErr = createBinary(File);
-  if (!BinaryOrErr)
-    reportError(File, BinaryOrErr.takeError());
-  auto OwnedBin = std::move(BinaryOrErr.get());
-  std::tie(Bin, Data) = OwnedBin.takeBinary();
-}
-
 ElfType ELFReader::getElfType() const {
-  if (isa<ELFObjectFile<ELF32LE>>(Bin.get()))
+  if (isa<ELFObjectFile<ELF32LE>>(Bin))
     return ELFT_ELF32LE;
-  if (isa<ELFObjectFile<ELF64LE>>(Bin.get()))
+  if (isa<ELFObjectFile<ELF64LE>>(Bin))
     return ELFT_ELF64LE;
-  if (isa<ELFObjectFile<ELF32BE>>(Bin.get()))
+  if (isa<ELFObjectFile<ELF32BE>>(Bin))
     return ELFT_ELF32BE;
-  if (isa<ELFObjectFile<ELF64BE>>(Bin.get()))
+  if (isa<ELFObjectFile<ELF64BE>>(Bin))
     return ELFT_ELF64BE;
   llvm_unreachable("Invalid ELFType");
 }
 
 std::unique_ptr<Object> ELFReader::create() const {
-  auto Obj = llvm::make_unique<Object>(Data);
-  if (auto *o = dyn_cast<ELFObjectFile<ELF32LE>>(Bin.get())) {
+  auto Obj = llvm::make_unique<Object>();
+  if (auto *o = dyn_cast<ELFObjectFile<ELF32LE>>(Bin)) {
     ELFBuilder<ELF32LE> Builder(*o, *Obj);
     Builder.build();
     return Obj;
-  } else if (auto *o = dyn_cast<ELFObjectFile<ELF64LE>>(Bin.get())) {
+  } else if (auto *o = dyn_cast<ELFObjectFile<ELF64LE>>(Bin)) {
     ELFBuilder<ELF64LE> Builder(*o, *Obj);
     Builder.build();
     return Obj;
-  } else if (auto *o = dyn_cast<ELFObjectFile<ELF32BE>>(Bin.get())) {
+  } else if (auto *o = dyn_cast<ELFObjectFile<ELF32BE>>(Bin)) {
     ELFBuilder<ELF32BE> Builder(*o, *Obj);
     Builder.build();
     return Obj;
-  } else if (auto *o = dyn_cast<ELFObjectFile<ELF64BE>>(Bin.get())) {
+  } else if (auto *o = dyn_cast<ELFObjectFile<ELF64BE>>(Bin)) {
     ELFBuilder<ELF64BE> Builder(*o, *Obj);
     Builder.build();
     return Obj;
@@ -732,14 +961,14 @@ std::unique_ptr<Object> ELFReader::create() const {
 }
 
 template <class ELFT> void ELFWriter<ELFT>::writeEhdr() {
-  uint8_t *Buf = BufPtr->getBufferStart();
-  Elf_Ehdr &Ehdr = *reinterpret_cast<Elf_Ehdr *>(Buf);
+  uint8_t *B = Buf.getBufferStart();
+  Elf_Ehdr &Ehdr = *reinterpret_cast<Elf_Ehdr *>(B);
   std::copy(Obj.Ident, Obj.Ident + 16, Ehdr.e_ident);
   Ehdr.e_type = Obj.Type;
   Ehdr.e_machine = Obj.Machine;
   Ehdr.e_version = Obj.Version;
   Ehdr.e_entry = Obj.Entry;
-  Ehdr.e_phoff = sizeof(Elf_Ehdr);
+  Ehdr.e_phoff = Obj.ProgramHdrSegment.Offset;
   Ehdr.e_flags = Obj.Flags;
   Ehdr.e_ehsize = sizeof(Elf_Ehdr);
   Ehdr.e_phentsize = sizeof(Elf_Phdr);
@@ -747,8 +976,27 @@ template <class ELFT> void ELFWriter<ELFT>::writeEhdr() {
   Ehdr.e_shentsize = sizeof(Elf_Shdr);
   if (WriteSectionHeaders) {
     Ehdr.e_shoff = Obj.SHOffset;
-    Ehdr.e_shnum = size(Obj.sections()) + 1;
-    Ehdr.e_shstrndx = Obj.SectionNames->Index;
+    // """
+    // If the number of sections is greater than or equal to
+    // SHN_LORESERVE (0xff00), this member has the value zero and the actual
+    // number of section header table entries is contained in the sh_size field
+    // of the section header at index 0.
+    // """
+    auto Shnum = size(Obj.sections()) + 1;
+    if (Shnum >= SHN_LORESERVE)
+      Ehdr.e_shnum = 0;
+    else
+      Ehdr.e_shnum = Shnum;
+    // """
+    // If the section name string table section index is greater than or equal
+    // to SHN_LORESERVE (0xff00), this member has the value SHN_XINDEX (0xffff)
+    // and the actual index of the section name string table section is
+    // contained in the sh_link field of the section header at index 0.
+    // """
+    if (Obj.SectionNames->Index >= SHN_LORESERVE)
+      Ehdr.e_shstrndx = SHN_XINDEX;
+    else
+      Ehdr.e_shstrndx = Obj.SectionNames->Index;
   } else {
     Ehdr.e_shoff = 0;
     Ehdr.e_shnum = 0;
@@ -762,17 +1010,26 @@ template <class ELFT> void ELFWriter<ELFT>::writePhdrs() {
 }
 
 template <class ELFT> void ELFWriter<ELFT>::writeShdrs() {
-  uint8_t *Buf = BufPtr->getBufferStart() + Obj.SHOffset;
+  uint8_t *B = Buf.getBufferStart() + Obj.SHOffset;
   // This reference serves to write the dummy section header at the begining
   // of the file. It is not used for anything else
-  Elf_Shdr &Shdr = *reinterpret_cast<Elf_Shdr *>(Buf);
+  Elf_Shdr &Shdr = *reinterpret_cast<Elf_Shdr *>(B);
   Shdr.sh_name = 0;
   Shdr.sh_type = SHT_NULL;
   Shdr.sh_flags = 0;
   Shdr.sh_addr = 0;
   Shdr.sh_offset = 0;
-  Shdr.sh_size = 0;
-  Shdr.sh_link = 0;
+  // See writeEhdr for why we do this.
+  uint64_t Shnum = size(Obj.sections()) + 1;
+  if (Shnum >= SHN_LORESERVE)
+    Shdr.sh_size = Shnum;
+  else
+    Shdr.sh_size = 0;
+  // See writeEhdr for why we do this.
+  if (Obj.SectionNames != nullptr && Obj.SectionNames->Index >= SHN_LORESERVE)
+    Shdr.sh_link = Obj.SectionNames->Index;
+  else
+    Shdr.sh_link = 0;
   Shdr.sh_info = 0;
   Shdr.sh_addralign = 0;
   Shdr.sh_entsize = 0;
@@ -800,9 +1057,10 @@ void Object::removeSections(std::function<bool(const SectionBase &)> ToRemove) {
       });
   if (SymbolTable != nullptr && ToRemove(*SymbolTable))
     SymbolTable = nullptr;
-  if (SectionNames != nullptr && ToRemove(*SectionNames)) {
+  if (SectionNames != nullptr && ToRemove(*SectionNames))
     SectionNames = nullptr;
-  }
+  if (SectionIndexTable != nullptr && ToRemove(*SectionIndexTable))
+    SectionIndexTable = nullptr;
   // Now make sure there are no remaining references to the sections that will
   // be removed. Sometimes it is impossible to remove a reference so we emit
   // an error here instead.
@@ -814,6 +1072,14 @@ void Object::removeSections(std::function<bool(const SectionBase &)> ToRemove) {
   }
   // Now finally get rid of them all togethor.
   Sections.erase(Iter, std::end(Sections));
+}
+
+void Object::removeSymbols(function_ref<bool(const Symbol &)> ToRemove) {
+  if (!SymbolTable)
+    return;
+
+  for (const SecPtr &Sec : Sections)
+    Sec->removeSymbols(ToRemove);
 }
 
 void Object::sortSections() {
@@ -913,17 +1179,13 @@ template <class ELFT> void ELFWriter<ELFT>::assignOffsets() {
   std::vector<Segment *> OrderedSegments;
   for (auto &Segment : Obj.segments())
     OrderedSegments.push_back(&Segment);
+  OrderedSegments.push_back(&Obj.ElfHdrSegment);
+  OrderedSegments.push_back(&Obj.ProgramHdrSegment);
   OrderSegments(OrderedSegments);
-  // The size of ELF + program headers will not change so it is ok to assume
-  // that the first offset of the first segment is a good place to start
-  // outputting sections. This covers both the standard case and the PT_PHDR
-  // case.
-  uint64_t Offset;
-  if (!OrderedSegments.empty()) {
-    Offset = OrderedSegments[0]->Offset;
-  } else {
-    Offset = sizeof(Elf_Ehdr);
-  }
+  // Offset is used as the start offset of the first segment to be laid out.
+  // Since the ELF Header (ElfHdrSegment) must be at the start of the file,
+  // we start at offset 0.
+  uint64_t Offset = 0;
   Offset = LayoutSegments(OrderedSegments, Offset);
   Offset = LayoutSections(Obj.sections(), Offset);
   // If we need to write the section header table out then we need to align the
@@ -947,17 +1209,8 @@ template <class ELFT> void ELFWriter<ELFT>::write() {
   writeSectionData();
   if (WriteSectionHeaders)
     writeShdrs();
-  if (auto E = BufPtr->commit())
-    reportError(File, errorToErrorCode(std::move(E)));
-}
-
-void Writer::createBuffer(uint64_t Size) {
-  auto BufferOrErr =
-      FileOutputBuffer::create(File, Size, FileOutputBuffer::F_executable);
-  handleAllErrors(BufferOrErr.takeError(), [this](const ErrorInfoBase &) {
-    error("failed to open " + File);
-  });
-  BufPtr = std::move(*BufferOrErr);
+  if (auto E = Buf.commit())
+    reportError(Buf.getName(), errorToErrorCode(std::move(E)));
 }
 
 template <class ELFT> void ELFWriter<ELFT>::finalize() {
@@ -968,16 +1221,59 @@ template <class ELFT> void ELFWriter<ELFT>::finalize() {
     error("Cannot write section header table because section header string "
           "table was removed.");
 
-  // Make sure we add the names of all the sections.
+  Obj.sortSections();
+
+  // We need to assign indexes before we perform layout because we need to know
+  // if we need large indexes or not. We can assign indexes first and check as
+  // we go to see if we will actully need large indexes.
+  bool NeedsLargeIndexes = false;
+  if (size(Obj.sections()) >= SHN_LORESERVE) {
+    auto Sections = Obj.sections();
+    NeedsLargeIndexes =
+        std::any_of(Sections.begin() + SHN_LORESERVE, Sections.end(),
+                    [](const SectionBase &Sec) { return Sec.HasSymbol; });
+    // TODO: handle case where only one section needs the large index table but
+    // only needs it because the large index table hasn't been removed yet.
+  }
+
+  if (NeedsLargeIndexes) {
+    // This means we definitely need to have a section index table but if we
+    // already have one then we should use it instead of making a new one.
+    if (Obj.SymbolTable != nullptr && Obj.SectionIndexTable == nullptr) {
+      // Addition of a section to the end does not invalidate the indexes of
+      // other sections and assigns the correct index to the new section.
+      auto &Shndx = Obj.addSection<SectionIndexSection>();
+      Obj.SymbolTable->setShndxTable(&Shndx);
+      Shndx.setSymTab(Obj.SymbolTable);
+    }
+  } else {
+    // Since we don't need SectionIndexTable we should remove it and all
+    // references to it.
+    if (Obj.SectionIndexTable != nullptr) {
+      Obj.removeSections([this](const SectionBase &Sec) {
+        return &Sec == Obj.SectionIndexTable;
+      });
+    }
+  }
+
+  // Make sure we add the names of all the sections. Importantly this must be
+  // done after we decide to add or remove SectionIndexes.
   if (Obj.SectionNames != nullptr)
     for (const auto &Section : Obj.sections()) {
       Obj.SectionNames->addString(Section.Name);
     }
-  // Make sure we add the names of all the symbols.
-  if (Obj.SymbolTable != nullptr)
-    Obj.SymbolTable->addSymbolNames();
 
-  Obj.sortSections();
+  // Before we can prepare for layout the indexes need to be finalized.
+  uint64_t Index = 0;
+  for (auto &Sec : Obj.sections())
+    Sec.Index = Index++;
+
+  // The symbol table does not update all other sections on update. For
+  // instance, symbol names are not added as new symbols are added. This means
+  // that some sections, like .strtab, don't yet have their final size.
+  if (Obj.SymbolTable != nullptr)
+    Obj.SymbolTable->prepareForLayout();
+
   assignOffsets();
 
   // Finalize SectionNames first so that we can assign name indexes.
@@ -994,8 +1290,8 @@ template <class ELFT> void ELFWriter<ELFT>::finalize() {
     Section.finalize();
   }
 
-  createBuffer(totalSize());
-  SecWriter = llvm::make_unique<ELFSectionWriter<ELFT>>(*BufPtr);
+  Buf.allocate(totalSize());
+  SecWriter = llvm::make_unique<ELFSectionWriter<ELFT>>(Buf);
 }
 
 void BinaryWriter::write() {
@@ -1004,8 +1300,8 @@ void BinaryWriter::write() {
       continue;
     Section.accept(*SecWriter);
   }
-  if (auto E = BufPtr->commit())
-    reportError(File, errorToErrorCode(std::move(E)));
+  if (auto E = Buf.commit())
+    reportError(Buf.getName(), errorToErrorCode(std::move(E)));
 }
 
 void BinaryWriter::finalize() {
@@ -1087,11 +1383,12 @@ void BinaryWriter::finalize() {
       TotalSize = std::max(TotalSize, Section->Offset + Section->Size);
   }
 
-  createBuffer(TotalSize);
-  SecWriter = llvm::make_unique<BinarySectionWriter>(*BufPtr);
+  Buf.allocate(TotalSize);
+  SecWriter = llvm::make_unique<BinarySectionWriter>(Buf);
 }
 
 namespace llvm {
+namespace objcopy {
 
 template class ELFBuilder<ELF64LE>;
 template class ELFBuilder<ELF64BE>;
@@ -1102,5 +1399,5 @@ template class ELFWriter<ELF64LE>;
 template class ELFWriter<ELF64BE>;
 template class ELFWriter<ELF32LE>;
 template class ELFWriter<ELF32BE>;
-
+} // end namespace objcopy
 } // end namespace llvm
